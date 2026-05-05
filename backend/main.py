@@ -236,3 +236,14 @@ NEXT QUESTION: ...
             next_q = line.replace("NEXT QUESTION:", "").strip()
 
     return {"feedback": feedback, "next_question": next_q}
+
+@app.get("/make-pro/{email}")
+def make_pro(email: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.plan = "pro"
+    user.analysis_limit = 999
+    user.usage_count = 0
+    db.commit()
+    return {"message": f"{email} is now Pro!"}
