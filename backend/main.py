@@ -26,6 +26,10 @@ app.add_middleware(
 
 create_tables()
 
+@app.get("/")
+def health_check():
+    return {"status": "ok"}
+
 # ─── Auth Models ───────────────────────────────────────
 class SignupRequest(BaseModel):
     name: str
