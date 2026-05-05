@@ -21,6 +21,12 @@ export default function Dashboard() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+  const [jdText, setJdText] = useState("");
+  const [jdResult, setJdResult] = useState(null);
+  const [jdLoading, setJdLoading] = useState(false);
+  const [companyName, setCompanyName] = useState("");
+  const [coverLetter, setCoverLetter] = useState(null);
+  const [coverLoading, setCoverLoading] = useState(false);
 
   const isPro = user?.plan === "pro" || user?.plan === "elite";
   const usageLeft = Math.max(0, 2 - (user?.usage_count || 0));
@@ -112,10 +118,43 @@ export default function Dashboard() {
     finally { setChatLoading(false); }
   };
 
+  const handleJDMatch = async () => {
+    if (!file) return toast.error("Upload resume first");
+    if (!jdText.trim()) return toast.error("Paste job description first");
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("job_description", jdText);
+    setJdLoading(true);
+    try {
+      const res = await api.post("/match-jd", formData);
+      setJdResult(res.data.result);
+      toast.success("JD Match complete!");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "JD Match failed");
+    } finally { setJdLoading(false); }
+  };
+
+  const handleCoverLetter = async () => {
+    if (!isPro) return toast.error("Upgrade to Pro for Cover Letter");
+    if (!file) return toast.error("Upload resume first");
+    if (!jobRole) return toast.error("Enter job role first");
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("job_role", jobRole);
+    formData.append("company_name", companyName || "the company");
+    setCoverLoading(true);
+    try {
+      const res = await api.post("/cover-letter", formData);
+      setCoverLetter(res.data.cover_letter);
+      toast.success("Cover letter ready!");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Cover letter failed");
+    } finally { setCoverLoading(false); }
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: "#0A0A0F", color: "#fff", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
-      
-      {/* Navbar */}
+
       <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 32px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(10,10,15,0.98)" }}>
         <div style={{ fontSize: 20, fontWeight: 700 }}>Resume<span style={{ color: "#F59E0B" }}>AI</span></div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -138,29 +177,24 @@ export default function Dashboard() {
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 20px" }}>
 
-        {/* Upgrade Banner */}
         {!isPro && (
           <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 12, padding: "14px 20px", marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-            <div style={{ fontSize: 14, color: "#ccc" }}>
-              🔒 Unlock Resume Rewrite, Mock Interview & PDF Download
-            </div>
+            <div style={{ fontSize: 14, color: "#ccc" }}>🔒 Unlock Resume Rewrite, Mock Interview, Cover Letter & PDF Download</div>
             <button style={{ padding: "8px 18px", borderRadius: 8, border: "none", background: "#F59E0B", color: "#000", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>
               Upgrade to Pro — ₹199/mo
             </button>
           </div>
         )}
 
-        {/* Tabs */}
-        <div style={{ display: "flex", gap: 4, marginBottom: 28, background: "#13131A", padding: 4, borderRadius: 10, width: "fit-content" }}>
-          {[["analyze", "Analyze"], ["rewrite", "Rewrite ✨"], ["interview", "Interview 🎤"]].map(([tab, label]) => (
+        <div style={{ display: "flex", gap: 4, marginBottom: 28, background: "#13131A", padding: 4, borderRadius: 10, flexWrap: "wrap" }}>
+          {[["analyze", "Analyze"], ["rewrite", "Rewrite ✨"], ["interview", "Interview 🎤"], ["jd", "JD Match 🎯"], ["cover", "Cover Letter 📝"]].map(([tab, label]) => (
             <button key={tab} onClick={() => setActiveTab(tab)}
               style={{ padding: "8px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 500, transition: "all 0.15s", background: activeTab === tab ? "#F59E0B" : "transparent", color: activeTab === tab ? "#000" : "#666" }}>
-              {label} {!isPro && tab !== "analyze" && "🔒"}
+              {label} {!isPro && tab !== "analyze" && tab !== "jd" && "🔒"}
             </button>
           ))}
         </div>
 
-        {/* Upload Box */}
         <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 24, marginBottom: 20 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
             <div>
@@ -206,24 +240,26 @@ export default function Dashboard() {
               🎤 Start Mock Interview
             </button>
           )}
+
+          {activeTab === "cover" && (
+            <input value={companyName} onChange={e => setCompanyName(e.target.value)}
+              placeholder="Company name (e.g. Google, Infosys)"
+              style={{ width: "100%", padding: "10px 14px", borderRadius: 8, background: "#0A0A0F", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 12 }}
+            />
+          )}
         </div>
 
-        {/* Analysis Result */}
         {activeTab === "analyze" && result && (
           <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 24 }}>
-            {/* Score Bar */}
             <div style={{ marginBottom: 24 }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
                 <span style={{ color: "#999", fontSize: 14 }}>ATS Score</span>
-                <span style={{ fontWeight: 700, fontSize: 18, color: result.score >= 70 ? "#22c55e" : result.score >= 50 ? "#F59E0B" : "#ef4444" }}>
-                  {result.score}/100
-                </span>
+                <span style={{ fontWeight: 700, fontSize: 18, color: result.score >= 70 ? "#22c55e" : result.score >= 50 ? "#F59E0B" : "#ef4444" }}>{result.score}/100</span>
               </div>
               <div style={{ height: 8, background: "#1a1a2a", borderRadius: 99, overflow: "hidden" }}>
                 <div style={{ height: "100%", borderRadius: 99, width: `${result.score}%`, background: result.score >= 70 ? "#22c55e" : result.score >= 50 ? "#F59E0B" : "#ef4444", transition: "width 0.8s ease" }} />
               </div>
             </div>
-
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
               <div>
                 <h3 style={{ color: "#22c55e", fontSize: 15, marginBottom: 12 }}>✅ Strengths</h3>
@@ -242,7 +278,6 @@ export default function Dashboard() {
                 ))}
               </div>
             </div>
-
             {result.missing_keywords?.length > 0 && (
               <div style={{ marginTop: 20 }}>
                 <h3 style={{ fontSize: 15, marginBottom: 12, color: "#ef4444" }}>❌ Missing Keywords</h3>
@@ -253,7 +288,6 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
-
             {result.improved_bullets?.length > 0 && (
               <div style={{ marginTop: 20 }}>
                 <h3 style={{ fontSize: 15, marginBottom: 12 }}>💡 Improved Bullet Points</h3>
@@ -268,7 +302,6 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Rewrite Result */}
         {activeTab === "rewrite" && rewritten && (
           <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 24 }}>
             <h3 style={{ marginBottom: 16 }}>✨ Rewritten Resume</h3>
@@ -276,12 +309,9 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Interview Chat */}
         {activeTab === "interview" && showChat && (
           <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, overflow: "hidden" }}>
-            <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", fontSize: 14, color: "#999" }}>
-              🎤 Mock Interview Session
-            </div>
+            <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", fontSize: 14, color: "#999" }}>🎤 Mock Interview Session</div>
             <div style={{ height: 340, overflowY: "auto", padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
               {messages.map((m, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: m.sender === "user" ? "flex-end" : "flex-start" }}>
@@ -305,6 +335,77 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        {activeTab === "jd" && (
+          <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 24 }}>
+            <h3 style={{ marginBottom: 16 }}>🎯 Job Description Match</h3>
+            <textarea value={jdText} onChange={e => setJdText(e.target.value)}
+              placeholder="Paste the job description here..."
+              style={{ width: "100%", height: 150, padding: "12px 14px", borderRadius: 8, background: "#0A0A0F", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", fontSize: 13, outline: "none", resize: "vertical", boxSizing: "border-box" }}
+            />
+            <button onClick={handleJDMatch} disabled={jdLoading}
+              style={{ marginTop: 12, padding: "11px 28px", borderRadius: 8, border: "none", background: jdLoading ? "#333" : "#F59E0B", color: jdLoading ? "#666" : "#000", fontWeight: 700, cursor: jdLoading ? "not-allowed" : "pointer", fontSize: 14 }}>
+              {jdLoading ? "Matching..." : "🎯 Match Resume to JD"}
+            </button>
+            {jdResult && (
+              <div style={{ marginTop: 24 }}>
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                    <span style={{ color: "#999", fontSize: 14 }}>Match Score</span>
+                    <span style={{ fontWeight: 700, fontSize: 18, color: jdResult.match_score >= 70 ? "#22c55e" : jdResult.match_score >= 50 ? "#F59E0B" : "#ef4444" }}>{jdResult.match_score}%</span>
+                  </div>
+                  <div style={{ height: 8, background: "#1a1a2a", borderRadius: 99, overflow: "hidden" }}>
+                    <div style={{ height: "100%", borderRadius: 99, width: `${jdResult.match_score}%`, background: jdResult.match_score >= 70 ? "#22c55e" : jdResult.match_score >= 50 ? "#F59E0B" : "#ef4444", transition: "width 0.8s ease" }} />
+                  </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+                  <div>
+                    <h4 style={{ color: "#22c55e", marginBottom: 8 }}>✅ Matched Keywords</h4>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {jdResult.matched_keywords?.map((k, i) => (
+                        <span key={i} style={{ padding: "3px 10px", borderRadius: 99, background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)", fontSize: 12, color: "#22c55e" }}>{k}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <h4 style={{ color: "#ef4444", marginBottom: 8 }}>❌ Missing Keywords</h4>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {jdResult.missing_keywords?.map((k, i) => (
+                        <span key={i} style={{ padding: "3px 10px", borderRadius: 99, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", fontSize: 12, color: "#ef4444" }}>{k}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 10, padding: 14, fontSize: 13, color: "#ccc" }}>
+                  💡 {jdResult.recommendation}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "cover" && (
+          <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 24 }}>
+            <h3 style={{ marginBottom: 16 }}>📝 Cover Letter Generator</h3>
+            <button onClick={handleCoverLetter} disabled={coverLoading}
+              style={{ padding: "11px 28px", borderRadius: 8, border: "none", background: coverLoading ? "#333" : "#F59E0B", color: coverLoading ? "#666" : "#000", fontWeight: 700, cursor: coverLoading ? "not-allowed" : "pointer", fontSize: 14 }}>
+              {coverLoading ? "Generating..." : "📝 Generate Cover Letter"}
+            </button>
+            {coverLetter && (
+              <div style={{ marginTop: 20 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <h4>Your Cover Letter</h4>
+                  <button onClick={() => { navigator.clipboard.writeText(coverLetter); toast.success("Copied!"); }}
+                    style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "#fff", cursor: "pointer", fontSize: 12 }}>
+                    📋 Copy
+                  </button>
+                </div>
+                <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, color: "#ccc", lineHeight: 1.8, fontFamily: "inherit" }}>{coverLetter}</pre>
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
     </div>
   );

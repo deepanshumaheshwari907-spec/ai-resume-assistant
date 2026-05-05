@@ -247,3 +247,72 @@ def make_pro(email: str, db: Session = Depends(get_db)):
     user.usage_count = 0
     db.commit()
     return {"message": f"{email} is now Pro!"}
+
+# ─── Job Description Match ─────────────────────────────
+@app.post("/match-jd")
+async def match_jd(
+    file: UploadFile = File(...),
+    job_description: str = Form(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+    resume_text = extract_text(tmp_path)
+    os.unlink(tmp_path)
+    prompt = f"""
+You are an expert ATS recruiter. Compare this resume with the job description.
+Resume: {resume_text}
+Job Description: {job_description}
+Return ONLY valid JSON:
+{{
+  "match_score": 78,
+  "matched_keywords": ["python", "machine learning"],
+  "missing_keywords": ["docker", "kubernetes"],
+  "strong_sections": ["Education matches well"],
+  "weak_sections": ["Missing cloud experience"],
+  "recommendation": "Your resume is a good fit. Add Docker skills to improve."
+}}
+"""
+    response = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    raw = response.choices[0].message.content
+    start = raw.find("{")
+    end = raw.rfind("}") + 1
+    result = json.loads(raw[start:end])
+    return {"result": result}
+
+
+# ─── Cover Letter Generator ────────────────────────────
+@app.post("/cover-letter")
+async def generate_cover_letter(
+    file: UploadFile = File(...),
+    job_role: str = Form(...),
+    company_name: str = Form("the company"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.plan == "free":
+        raise HTTPException(status_code=403, detail="Upgrade to Pro to generate Cover Letters.")
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+    resume_text = extract_text(tmp_path)
+    os.unlink(tmp_path)
+    prompt = f"""
+Write a professional cover letter for:
+Job Role: {job_role}
+Company: {company_name}
+Resume: {resume_text}
+
+Write 3 paragraphs - opening, achievements, closing.
+Return ONLY the cover letter text.
+"""
+    response = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return {"cover_letter": response.choices[0].message.content}
