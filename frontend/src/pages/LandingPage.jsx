@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { FileText, Zap, MessageSquare, Download, CheckCircle, ArrowRight, Brain, Target, TrendingUp } from "lucide-react";
+import { Zap, MessageSquare, Download, CheckCircle, ArrowRight, Brain, Target, TrendingUp } from "lucide-react";
 
 export default function LandingPage() {
   const navigate = useNavigate();
