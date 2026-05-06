@@ -170,7 +170,7 @@ async def rewrite_resume(
     db: Session = Depends(get_db),
 ):
     # if current_user.plan == "free":
-     #   raise HTTPException(status_code=403, detail="Upgrade to Pro to use Resume Rewrite.")
+    #   raise HTTPException(status_code=403, detail="Upgrade to Pro to use Resume Rewrite.")
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(await file.read())
@@ -207,7 +207,7 @@ async def chat(
     current_user: User = Depends(get_current_user),
 ):
     # if current_user.plan == "free":
-     #   raise HTTPException(status_code=403, detail="Upgrade to Pro to use Mock Interview.")
+    #   raise HTTPException(status_code=403, detail="Upgrade to Pro to use Mock Interview.")
 
     prompt = f"""
 You are a professional job interviewer.
@@ -296,7 +296,7 @@ async def generate_cover_letter(
     db: Session = Depends(get_db),
 ):
     # if current_user.plan == "free":
-     #   raise HTTPException(status_code=403, detail="Upgrade to Pro to generate Cover Letters.")
+    #   raise HTTPException(status_code=403, detail="Upgrade to Pro to generate Cover Letters.")
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(await file.read())
         tmp_path = tmp.name
