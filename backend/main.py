@@ -169,7 +169,7 @@ async def rewrite_resume(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    #if current_user.plan == "free":
+    # if current_user.plan == "free":
      #   raise HTTPException(status_code=403, detail="Upgrade to Pro to use Resume Rewrite.")
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
