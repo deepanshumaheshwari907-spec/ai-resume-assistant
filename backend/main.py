@@ -116,8 +116,8 @@ async def upload_resume(
     db: Session = Depends(get_db),
 ):
     # Check free limit
-    if current_user.plan == "free" and current_user.usage_count >= current_user.analysis_limit:
-        raise HTTPException(status_code=403, detail="Free limit reached. Upgrade to Pro.")
+    #if current_user.plan == "free" and current_user.usage_count >= current_user.analysis_limit:
+     #   raise HTTPException(status_code=403, detail="Free limit reached. Upgrade to Pro.")
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(await file.read())
@@ -169,8 +169,8 @@ async def rewrite_resume(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if current_user.plan == "free":
-        raise HTTPException(status_code=403, detail="Upgrade to Pro to use Resume Rewrite.")
+    #if current_user.plan == "free":
+     #   raise HTTPException(status_code=403, detail="Upgrade to Pro to use Resume Rewrite.")
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(await file.read())
@@ -206,8 +206,8 @@ async def chat(
     data: ChatRequest,
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.plan == "free":
-        raise HTTPException(status_code=403, detail="Upgrade to Pro to use Mock Interview.")
+    #if current_user.plan == "free":
+     #   raise HTTPException(status_code=403, detail="Upgrade to Pro to use Mock Interview.")
 
     prompt = f"""
 You are a professional job interviewer.
@@ -295,8 +295,8 @@ async def generate_cover_letter(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if current_user.plan == "free":
-        raise HTTPException(status_code=403, detail="Upgrade to Pro to generate Cover Letters.")
+    #if current_user.plan == "free":
+     #   raise HTTPException(status_code=403, detail="Upgrade to Pro to generate Cover Letters.")
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(await file.read())
         tmp_path = tmp.name
