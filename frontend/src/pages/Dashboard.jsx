@@ -52,7 +52,6 @@ export default function Dashboard() {
   };
 
   const handleRewrite = async () => {
-    if (!isPro) return toast.error("Upgrade to Pro to unlock Resume Rewrite");
     if (!file) return toast.error("Upload resume first");
     const formData = new FormData();
     formData.append("file", file);
@@ -88,7 +87,6 @@ export default function Dashboard() {
   };
 
   const startInterview = async () => {
-    if (!isPro) return toast.error("Upgrade to Pro to unlock Mock Interview");
     setShowChat(true);
     setChatLoading(true);
     try {
@@ -135,7 +133,6 @@ export default function Dashboard() {
   };
 
   const handleCoverLetter = async () => {
-    if (!isPro) return toast.error("Upgrade to Pro for Cover Letter");
     if (!file) return toast.error("Upload resume first");
     if (!jobRole) return toast.error("Enter job role first");
     const formData = new FormData();
