@@ -158,7 +158,7 @@ export default function Dashboard() {
       <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 32px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(10,10,15,0.98)" }}>
         <div style={{ fontSize: 20, fontWeight: 700 }}>Resume<span style={{ color: "#F59E0B" }}>AI</span></div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          {!isPro && (
+           {!isPro && (
             <div style={{ fontSize: 13, color: "#666", background: "#13131A", padding: "6px 14px", borderRadius: 99, border: "1px solid rgba(255,255,255,0.08)" }}>
               <span style={{ color: usageLeft > 0 ? "#F59E0B" : "#ef4444" }}>{usageLeft}</span> / 2 free left
             </div>
@@ -177,20 +177,13 @@ export default function Dashboard() {
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 20px" }}>
 
-        {!isPro && (
-          <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 12, padding: "14px 20px", marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-            <div style={{ fontSize: 14, color: "#ccc" }}>🔒 Unlock Resume Rewrite, Mock Interview, Cover Letter & PDF Download</div>
-            <button style={{ padding: "8px 18px", borderRadius: 8, border: "none", background: "#F59E0B", color: "#000", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>
-              Upgrade to Pro — ₹199/mo
-            </button>
-          </div>
-        )}
+      
 
         <div style={{ display: "flex", gap: 4, marginBottom: 28, background: "#13131A", padding: 4, borderRadius: 10, flexWrap: "wrap" }}>
           {[["analyze", "Analyze"], ["rewrite", "Rewrite ✨"], ["interview", "Interview 🎤"], ["jd", "JD Match 🎯"], ["cover", "Cover Letter 📝"]].map(([tab, label]) => (
             <button key={tab} onClick={() => setActiveTab(tab)}
               style={{ padding: "8px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 500, transition: "all 0.15s", background: activeTab === tab ? "#F59E0B" : "transparent", color: activeTab === tab ? "#000" : "#666" }}>
-              {label} {!isPro && tab !== "analyze" && tab !== "jd" && "🔒"}
+              {label} 
             </button>
           ))}
         </div>
