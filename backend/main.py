@@ -30,7 +30,6 @@ create_tables()
 def health_check():
     return {"status": "ok"}
 
-# ─── Auth Models ───────────────────────────────────────
 class SignupRequest(BaseModel):
     name: str
     email: str
@@ -40,7 +39,6 @@ class LoginRequest(BaseModel):
     email: str
     password: str
 
-# ─── Auth Routes ───────────────────────────────────────
 @app.post("/auth/signup")
 def signup(data: SignupRequest, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == data.email).first()
@@ -99,7 +97,17 @@ def get_me(current_user: User = Depends(get_current_user)):
         "analysis_limit": current_user.analysis_limit,
     }
 
-# ─── Helper ────────────────────────────────────────────
+@app.get("/make-pro/{email}")
+def make_pro(email: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.plan = "pro"
+    user.analysis_limit = 999
+    user.usage_count = 0
+    db.commit()
+    return {"message": f"{email} is now Pro!"}
+
 def extract_text(file_path: str) -> str:
     text = ""
     with pdfplumber.open(file_path) as pdf:
@@ -107,7 +115,6 @@ def extract_text(file_path: str) -> str:
             text += page.extract_text() or ""
     return text
 
-# ─── Resume Analysis ───────────────────────────────────
 @app.post("/upload-resume")
 async def upload_resume(
     file: UploadFile = File(...),
@@ -115,10 +122,6 @@ async def upload_resume(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # Check free limit
-    # if current_user.plan == "free" and current_user.usage_count >= current_user.analysis_limit:
-     #   raise HTTPException(status_code=403, detail="Free limit reached. Upgrade to Pro.")
-
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(await file.read())
         tmp_path = tmp.name
@@ -155,13 +158,11 @@ Return ONLY valid JSON like this:
     end = raw.rfind("}") + 1
     result = json.loads(raw[start:end])
 
-    # Update usage
     current_user.usage_count += 1
     db.commit()
 
     return {"result": result}
 
-# ─── Rewrite Resume ────────────────────────────────────
 @app.post("/rewrite")
 async def rewrite_resume(
     file: UploadFile = File(...),
@@ -169,9 +170,6 @@ async def rewrite_resume(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # if current_user.plan == "free":
-    #   raise HTTPException(status_code=403, detail="Upgrade to Pro to use Resume Rewrite.")
-
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(await file.read())
         tmp_path = tmp.name
@@ -196,7 +194,6 @@ Return ONLY the rewritten resume text, no extra explanation.
 
     return {"rewritten_resume": response.choices[0].message.content}
 
-# ─── Interview Chat ─────────────────────────────────────
 class ChatRequest(BaseModel):
     answer: str
     history: str
@@ -206,9 +203,6 @@ async def chat(
     data: ChatRequest,
     current_user: User = Depends(get_current_user),
 ):
-    # if current_user.plan == "free":
-    #   raise HTTPException(status_code=403, detail="Upgrade to Pro to use Mock Interview.")
-
     prompt = f"""
 You are a professional job interviewer.
 Conversation so far:
@@ -237,18 +231,6 @@ NEXT QUESTION: ...
 
     return {"feedback": feedback, "next_question": next_q}
 
-@app.get("/make-pro/{email}")
-def make_pro(email: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == email).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    user.plan = "pro"
-    user.analysis_limit = 999
-    user.usage_count = 0
-    db.commit()
-    return {"message": f"{email} is now Pro!"}
-
-# ─── Job Description Match ─────────────────────────────
 @app.post("/match-jd")
 async def match_jd(
     file: UploadFile = File(...),
@@ -259,12 +241,19 @@ async def match_jd(
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(await file.read())
         tmp_path = tmp.name
+
     resume_text = extract_text(tmp_path)
     os.unlink(tmp_path)
+
     prompt = f"""
 You are an expert ATS recruiter. Compare this resume with the job description.
-Resume: {resume_text}
-Job Description: {job_description}
+
+Resume:
+{resume_text}
+
+Job Description:
+{job_description}
+
 Return ONLY valid JSON:
 {{
   "match_score": 78,
@@ -285,8 +274,6 @@ Return ONLY valid JSON:
     result = json.loads(raw[start:end])
     return {"result": result}
 
-
-# ─── Cover Letter Generator ────────────────────────────
 @app.post("/cover-letter")
 async def generate_cover_letter(
     file: UploadFile = File(...),
@@ -295,13 +282,13 @@ async def generate_cover_letter(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # if current_user.plan == "free":
-    #   raise HTTPException(status_code=403, detail="Upgrade to Pro to generate Cover Letters.")
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(await file.read())
         tmp_path = tmp.name
+
     resume_text = extract_text(tmp_path)
     os.unlink(tmp_path)
+
     prompt = f"""
 Write a professional cover letter for:
 Job Role: {job_role}
