@@ -10,7 +10,7 @@ export default function LandingPage() {
     <div style={{ background: "#0A0A0F", color: "#fff", minHeight: "100vh", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
       
       {/* Navbar */}
-      <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 60px", borderBottom: "1px solid rgba(255,255,255,0.06)", position: "sticky", top: 0, zIndex: 100, background: "rgba(10,10,15,0.95)", backdropFilter: "blur(12px)" }}>
+      <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", position: "sticky", top: 0, zIndex: 100, background: "rgba(10,10,15,0.95)", backdropFilter: "blur(12px)" }}>
         <div style={{ fontSize: 22, fontWeight: 700 }}>Resume<span style={{ color: "#F59E0B" }}>AI</span></div>
         <div style={{ display: "flex", gap: 12 }}>
           {user ? (
@@ -31,7 +31,7 @@ export default function LandingPage() {
         <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 99, background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.3)", color: "#F59E0B", fontSize: 13, fontWeight: 500, marginBottom: 28 }}>
           <Zap size={13} /> AI-Powered Resume Analysis
         </div>
-        <h1 style={{ fontSize: 60, fontWeight: 800, lineHeight: 1.1, letterSpacing: "-2px", marginBottom: 22 }}>
+        <h1 style={{ fontSize: "clamp(32px, 8vw, 60px)", fontWeight: 800, lineHeight: 1.1, letterSpacing: "-2px", marginBottom: 22 }}>
           Get Hired Faster with<br />
           <span style={{ color: "#F59E0B" }}>AI That Knows</span><br />
           What Recruiters Want
@@ -50,7 +50,7 @@ export default function LandingPage() {
       </div>
 
       {/* Stats */}
-      <div style={{ display: "flex", justifyContent: "center", gap: 60, padding: "40px 20px", borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+      <div style={{ display: "flex", justifyContent: "center", gap: 20, padding: "40px 20px", borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
         {[["10,000+", "Resumes Analyzed"], ["94%", "ATS Pass Rate"], ["3x", "More Interviews"], ["Free", "To Get Started"]].map(([n, l]) => (
           <div key={l} style={{ textAlign: "center" }}>
             <div style={{ fontSize: 32, fontWeight: 800, color: "#F59E0B" }}>{n}</div>

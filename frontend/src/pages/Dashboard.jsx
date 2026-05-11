@@ -152,7 +152,7 @@ export default function Dashboard() {
   return (
     <div style={{ minHeight: "100vh", background: "#0A0A0F", color: "#fff", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
 
-      <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 32px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(10,10,15,0.98)" }}>
+      <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(10,10,15,0.98)" }}>
         <div style={{ fontSize: 20, fontWeight: 700 }}>Resume<span style={{ color: "#F59E0B" }}>AI</span></div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
            {!isPro && (
@@ -176,7 +176,7 @@ export default function Dashboard() {
 
       
 
-        <div style={{ display: "flex", gap: 4, marginBottom: 28, background: "#13131A", padding: 4, borderRadius: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 4, marginBottom: 28, background: "#13131A", padding: 4, borderRadius: 10, overflowX: "auto", whiteSpace: "nowrap" }}>
           {[["analyze", "Analyze"], ["rewrite", "Rewrite ✨"], ["interview", "Interview 🎤"], ["jd", "JD Match 🎯"], ["cover", "Cover Letter 📝"]].map(([tab, label]) => (
             <button key={tab} onClick={() => setActiveTab(tab)}
               style={{ padding: "8px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 500, transition: "all 0.15s", background: activeTab === tab ? "#F59E0B" : "transparent", color: activeTab === tab ? "#000" : "#666" }}>
