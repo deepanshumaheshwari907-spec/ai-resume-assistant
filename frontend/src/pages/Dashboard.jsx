@@ -205,7 +205,7 @@ export default function Dashboard() {
           {activeTab === "analyze" && (
             <button onClick={handleAnalyze} disabled={loading}
               style={{ padding: "11px 28px", borderRadius: 8, border: "none", background: loading ? "#333" : "#F59E0B", color: loading ? "#666" : "#000", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
-              <Zap size={16} /> {loading ? "Analyzing..." : "Analyze Resume"}
+              <Zap size={16} /> {loading ? "⚡ AI Analysis in progress... Please wait 30s" : "Analyze Resume"}
             </button>
           )}
 
@@ -400,3 +400,9 @@ export default function Dashboard() {
     </div>
   );
 }
+
+{loading && (
+  <div style={{ marginTop: 12, fontSize: 13, color: "#F59E0B", display: "flex", alignItems: "center", gap: 8 }}>
+    <span>⏳</span> Our AI is reading your resume — takes about 30 seconds
+  </div>
+)}
