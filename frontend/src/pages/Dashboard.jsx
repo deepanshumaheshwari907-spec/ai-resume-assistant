@@ -400,9 +400,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
-{loading && (
-  <div style={{ marginTop: 12, fontSize: 13, color: "#F59E0B", display: "flex", alignItems: "center", gap: 8 }}>
-    <span>⏳</span> Our AI is reading your resume — takes about 30 seconds
-  </div>
-)}
