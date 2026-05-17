@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import api from "../utils/api";
 import toast from "react-hot-toast";
 import jsPDF from "jspdf";
-import { LogOut, Zap, Download, Crown, CheckCircle, AlertCircle, Send } from "lucide-react";
+import { LogOut, Zap, Download, CheckCircle, AlertCircle, Send, Crown } from "lucide-react";
 
 export default function Dashboard() {
   const { user, logout, refreshUser } = useAuth();

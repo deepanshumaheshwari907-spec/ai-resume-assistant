@@ -207,7 +207,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <div style={{ textAlign: "center", padding: "24px 20px", borderTop: "1px solid rgba(255,255,255,0.05)", color: "#333", fontSize: 13 }}>
-        © 2025 ResumeAI · Made with ❤️ in India 🇮🇳 · <span style={{ color: "#F59E0B" }}>Free to use</span>
+        © 2026 ResumeAI · Made with ❤️ in India  · <span style={{ color: "#F59E0B" }}>Free to use</span>
       </div>
     </div>
   );
