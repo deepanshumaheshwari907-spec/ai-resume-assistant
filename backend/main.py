@@ -44,6 +44,16 @@ def signup(data: SignupRequest, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == data.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
+    
+    import re
+    email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_regex, data.email):
+        raise HTTPException(status_code=400, detail="Invalid email address")
+    if len(data.name.strip()) < 2:
+        raise HTTPException(status_code=400, detail="Name must be at least 2 characters")
+    if len(data.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
     user = User(
         name=data.name,
         email=data.email,
