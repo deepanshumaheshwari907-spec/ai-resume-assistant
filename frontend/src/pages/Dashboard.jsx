@@ -69,21 +69,82 @@ export default function Dashboard() {
   const downloadPDF = () => {
     if (!rewritten) return toast.error("Rewrite resume first");
     const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 15;
+    const contentWidth = pageWidth - margin * 2;
     let y = 20;
-    doc.setFont("Times", "Normal");
-    const lines = doc.splitTextToSize(rewritten, 180);
+
+    const lines = rewritten.split("\n");
+
     lines.forEach((line) => {
-      if (line === line.toUpperCase() && line.length < 40 && !line.includes("@")) {
-        doc.setFont("Times", "Bold"); doc.setFontSize(14);
-        doc.text(line, 15, y); y += 8;
-        doc.setFont("Times", "Normal"); doc.setFontSize(11);
+      const trimmed = line.trim();
+      if (!trimmed) { y += 4; return; }
+
+      // Name — first line, biggest
+      if (y === 20 && !trimmed.startsWith("Email") && !trimmed.startsWith("Phone")) {
+        doc.setFont("Helvetica", "bold");
+        doc.setFontSize(18);
+        doc.text(trimmed, pageWidth / 2, y, { align: "center" });
+        y += 8;
+
+      // Contact line
+      } else if (trimmed.startsWith("Email") || trimmed.startsWith("Phone") || trimmed.includes("@")) {
+        doc.setFont("Helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(80, 80, 80);
+        const contactLines = doc.splitTextToSize(trimmed, contentWidth);
+        contactLines.forEach(cl => { doc.text(cl, pageWidth / 2, y, { align: "center" }); y += 5; });
+        doc.setTextColor(0, 0, 0);
+        y += 2;
+
+      // Section headers (ALL CAPS, short)
+      } else if (trimmed === trimmed.toUpperCase() && trimmed.length > 2 && trimmed.length < 30 && !trimmed.includes("@") && !trimmed.includes("|")) {
+        y += 4;
+        doc.setFont("Helvetica", "bold");
+        doc.setFontSize(11);
+        doc.text(trimmed, margin, y);
+        y += 3;
+        // Draw line under header
+        doc.setDrawColor(0, 0, 0);
+        doc.setLineWidth(0.5);
+        doc.line(margin, y, pageWidth - margin, y);
+        y += 6;
+        doc.setFont("Helvetica", "normal");
+        doc.setFontSize(10);
+
+      // Bullet points
+      } else if (trimmed.startsWith("•") || trimmed.startsWith("-") || trimmed.startsWith("▸")) {
+        doc.setFont("Helvetica", "normal");
+        doc.setFontSize(9.5);
+        const bullet = "• " + trimmed.replace(/^[•\-▸]\s*/, "");
+        const wrapped = doc.splitTextToSize(bullet, contentWidth - 5);
+        wrapped.forEach((wl, i) => {
+          doc.text(i === 0 ? wl : "  " + wl, margin + 3, y);
+          y += 5;
+        });
+
+      // Job title / company lines (bold)
+      } else if (trimmed.includes("|") || trimmed.includes("–") || trimmed.includes("-")) {
+        doc.setFont("Helvetica", "bold");
+        doc.setFontSize(9.5);
+        const wrapped = doc.splitTextToSize(trimmed, contentWidth);
+        wrapped.forEach(wl => { doc.text(wl, margin, y); y += 5; });
+        doc.setFont("Helvetica", "normal");
+
+      // Normal text
       } else {
-        doc.setFontSize(11); doc.text(line, 15, y); y += 6;
+        doc.setFont("Helvetica", "normal");
+        doc.setFontSize(9.5);
+        const wrapped = doc.splitTextToSize(trimmed, contentWidth);
+        wrapped.forEach(wl => { doc.text(wl, margin, y); y += 5; });
       }
-      if (y > 280) { doc.addPage(); y = 20; }
+
+      // Page break
+      if (y > 275) { doc.addPage(); y = 20; }
     });
-    doc.save("resume-rewritten.pdf");
-    toast.success("PDF downloaded!");
+
+    doc.save("ResumeAI-Resume.pdf");
+    toast.success("Professional PDF downloaded! 📄");
   };
 
   const startInterview = async () => {

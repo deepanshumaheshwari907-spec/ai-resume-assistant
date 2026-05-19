@@ -71,7 +71,7 @@ def signup(data: SignupRequest, db: Session = Depends(get_db)):
         "user": {
             "id": user.id,
             "name": user.name,
-            "email": user.email,
+            "email": user.email,         
             "plan": user.plan,
             "usage_count": user.usage_count,
             "analysis_limit": user.analysis_limit,
@@ -189,14 +189,48 @@ async def rewrite_resume(
 
     prompt = f"""
 Rewrite this resume for the role: {job_role}
-Make it ATS-friendly, use strong action verbs, add metrics where possible.
-Keep it professional and structured.
 
-Resume:
+Output MUST follow this exact structure:
+
+[FULL NAME]
+Email: [email] | Phone: [phone] | GitHub: [github] | LinkedIn: [linkedin]
+
+SUMMARY
+2-3 lines about candidate
+
+SKILLS
+Technical Skills: skill1, skill2, skill3
+Tools & Technologies: tool1, tool2
+
+EXPERIENCE
+[Job Title] | [Company] | [Duration]
+- Achievement with metric
+- Achievement with metric
+
+PROJECTS
+[Project Name] | [Tech Stack]
+- Description with impact
+
+EDUCATION
+[Degree] | [College] | [Year]
+CGPA: X.X
+
+CERTIFICATIONS
+- Certification name
+
+Rules:
+- Use CAPS for section headers
+- Use bullet points (•) for achievements
+- Add strong action verbs
+- Add metrics wherever possible
+- Make it ATS-friendly for: {job_role}
+
+Resume to rewrite:
 {resume_text}
 
-Return ONLY the rewritten resume text, no extra explanation.
+Return ONLY the formatted resume. No extra text.
 """
+    
     response = client.chat.completions.create(
         model="llama-3.1-8b-instant",
         messages=[{"role": "user", "content": prompt}]
