@@ -168,6 +168,16 @@ Return ONLY valid JSON like this:
     end = raw.rfind("}") + 1
     result = json.loads(raw[start:end])
 
+    from database import ResumeAnalysis
+    import json as json_lib
+    analysis = ResumeAnalysis(
+        user_id=current_user.id,
+        job_role=job_role,
+        score=result["score"],
+        result=json_lib.dumps(result),
+    )
+    db.add(analysis)
+
     current_user.usage_count += 1
     db.commit()
 
@@ -347,3 +357,22 @@ Return ONLY the cover letter text.
         messages=[{"role": "user", "content": prompt}]
     )
     return {"cover_letter": response.choices[0].message.content}
+
+@app.get("/history")
+async def get_history(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    analyses = db.query(ResumeAnalysis).filter(
+        ResumeAnalysis.user_id == current_user.id
+    ).order_by(ResumeAnalysis.created_at.desc()).limit(10).all()
+    
+    return {"history": [
+        {
+            "id": a.id,
+            "job_role": a.job_role,
+            "score": a.score,
+            "created_at": str(a.created_at),
+            "result": json_lib.loads(a.result)
+        } for a in analyses
+    ]}

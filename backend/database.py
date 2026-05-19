@@ -24,6 +24,15 @@ class User(Base):
     analysis_limit = Column(Integer, default=2)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class ResumeAnalysis(Base):
+    __tablename__ = "resume_analyses"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False)
+    job_role = Column(String, nullable=False)
+    score = Column(Integer, nullable=False)
+    result = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 def get_db():
     db = SessionLocal()
     try:
