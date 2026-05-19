@@ -2,12 +2,13 @@ from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from database import get_db, User, create_tables
+from database import get_db, User, create_tables, ResumeAnalysis
 from auth import hash_password, verify_password, create_token, get_current_user
 import pdfplumber
 import tempfile
 import json
 import os
+import json as json_lib
 from groq import Groq
 from dotenv import load_dotenv
 
