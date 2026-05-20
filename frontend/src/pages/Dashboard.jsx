@@ -30,6 +30,7 @@ export default function Dashboard() {
   const [coverLoading, setCoverLoading] = useState(false);
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [displayScore, setDisplayScore] = useState(0);
 
   const handleLogout = () => { logout(); navigate("/"); };
 
@@ -43,6 +44,13 @@ export default function Dashboard() {
     try {
       const res = await api.post("/upload-resume", formData);
       setResult(res.data.result);
+      let count = 0;
+const target = res.data.result.score;
+const timer = setInterval(() => {
+  count += 2;
+  setDisplayScore(count);
+  if (count >= target) { setDisplayScore(target); clearInterval(timer); }
+}, 20);
       await refreshUser();
       toast.success("Analysis complete! 🎉");
     } catch (err) {
@@ -326,7 +334,7 @@ export default function Dashboard() {
             <div style={{ marginBottom: 28 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <span style={{ color: "#777", fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>ATS Score</span>
-                <span style={{ fontWeight: 900, fontSize: 22, color: result.score >= 70 ? "#22c55e" : result.score >= 50 ? "#F59E0B" : "#ef4444" }}>{result.score}<span style={{ fontSize: 14, color: "#444" }}>/100</span></span>
+                <span style={{ fontWeight: 900, fontSize: 22, color: result.score >= 70 ? "#22c55e" : result.score >= 50 ? "#F59E0B" : "#ef4444" }}>{displayScore}<span style={{ fontSize: 14, color: "#444" }}>/100</span></span>
               </div>
               <div style={{ height: 10, background: "rgba(255,255,255,0.05)", borderRadius: 99, overflow: "hidden" }}>
                 <div style={{ height: "100%", borderRadius: 99, width: `${result.score}%`, background: result.score >= 70 ? "linear-gradient(90deg, #16a34a, #22c55e)" : result.score >= 50 ? "linear-gradient(90deg, #d97706, #F59E0B)" : "linear-gradient(90deg, #dc2626, #ef4444)", transition: "width 1s ease" }} />
@@ -477,6 +485,23 @@ export default function Dashboard() {
                 style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "#aaa", cursor: "pointer", fontSize: 13 }}>
                 📋 Copy
               </button>
+              <button onClick={() => {
+                const doc = new jsPDF();
+                const lines = doc.splitTextToSize(coverLetter, 175);
+                doc.setFont("Helvetica", "normal");
+                doc.setFontSize(11);
+                let y = 20;
+                lines.forEach(line => {
+                  if (y > 275) { doc.addPage(); y = 20; }
+                  doc.text(line, 15, y);
+                  y += 6;
+                });
+                doc.save("CoverLetter-ResumeAI.pdf");
+                toast.success("Cover Letter PDF downloaded!");
+              }}
+                style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "linear-gradient(135deg, #F59E0B, #F97316)", color: "#000", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
+                📄 Download PDF
+                </button>
             </div>
             <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, color: "#aaa", lineHeight: 1.9, fontFamily: "inherit" }}>{coverLetter}</pre>
           </div>
