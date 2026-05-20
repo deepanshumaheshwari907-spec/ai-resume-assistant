@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import api from "../utils/api";
 import toast from "react-hot-toast";
 import jsPDF from "jspdf";
-import { LogOut, Zap, Download, CheckCircle, AlertCircle, Send, } from "lucide-react";
+import { LogOut, Zap, Download, CheckCircle, AlertCircle, Send,} from "lucide-react";
 
 export default function Dashboard() {
   const { user, logout, refreshUser } = useAuth();
@@ -245,8 +245,27 @@ export default function Dashboard() {
               <label style={{ fontSize: 12, color: "#555", display: "block", marginBottom: 8, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Job Role</label>
               <input value={jobRole} onChange={e => setJobRole(e.target.value)}
                 placeholder="e.g. Software Engineer"
+                list="job-roles"
                 style={{ width: "100%", padding: "11px 14px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", color: "#fff", fontSize: 14, outline: "none", boxSizing: "border-box" }}
               />
+              <datalist id="job-roles">
+                <option value="Software Engineer" />
+                <option value="Frontend Developer" />
+                <option value="Backend Developer" />
+                <option value="Full Stack Developer" />
+                <option value="Data Scientist" />
+                <option value="Data Analyst" />
+                <option value="Machine Learning Engineer" />
+                <option value="AI Engineer" />
+                <option value="DevOps Engineer" />
+                <option value="Product Manager" />
+                <option value="UI/UX Designer" />
+                <option value="Business Analyst" />
+                <option value="Cloud Engineer" />
+                <option value="Cybersecurity Analyst" />
+                <option value="Android Developer" />
+                <option value="iOS Developer" />
+              </datalist>
             </div>
             <div>
               <label style={{ fontSize: 12, color: "#555", display: "block", marginBottom: 8, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Resume (PDF)</label>
