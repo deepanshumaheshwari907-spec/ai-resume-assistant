@@ -7,6 +7,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
+import Terms from "./pages/Terms";
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
           <Route path="*" element={<NotFound />} />
+          <Route path="/terms" element={<Terms />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
