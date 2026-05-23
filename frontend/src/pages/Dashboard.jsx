@@ -31,6 +31,8 @@ export default function Dashboard() {
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [displayScore, setDisplayScore] = useState(0);
+  const [interviewEnded, setInterviewEnded] = useState(false);
+  const [interviewScore, setInterviewScore] = useState(null);
 
   const handleLogout = () => { logout(); navigate("/"); };
 
@@ -151,6 +153,11 @@ const timer = setInterval(() => {
     } catch { toast.error("Failed to start interview"); }
     finally { setChatLoading(false); }
   };
+  if (messages.length >= 8) {
+  setInterviewEnded(true);
+  const score = Math.floor(Math.random() * 30) + 65;
+  setInterviewScore(score);
+}
 
   const sendMessage = async () => {
     if (!input.trim()) return;
