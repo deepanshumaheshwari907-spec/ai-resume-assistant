@@ -202,6 +202,7 @@ export default function Dashboard() {
   const handleJDMatch = async () => {
     if (!file) return toast.error("Upload resume first");
     if (!jdText.trim()) return toast.error("Paste job description first");
+    if (jdText.length > 5000) return toast.error("Job description is too long! Max 5000 chars.");
     const formData = new FormData();
     formData.append("file", file);
     formData.append("job_description", jdText);
@@ -297,7 +298,7 @@ export default function Dashboard() {
                 <option value="AI Engineer" />
                 <option value="DevOps Engineer" />
               </datalist>
-            </div>
+            </div> 
             <div>
               <label style={{ fontSize: 12, color: "#888", display: "block", marginBottom: 8, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Resume (PDF Only)</label>
               <input type="file" accept=".pdf" onChange={e => setFile(e.target.files[0])}
@@ -465,6 +466,10 @@ export default function Dashboard() {
               placeholder="Paste the full job description metrics here..."
               style={{ width: "100%", height: 140, padding: "12px 14px", borderRadius: 10, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", color: "#fff", fontSize: 13, outline: "none", resize: "vertical", boxSizing: "border-box", fontFamily: "inherit" }}
             />
+            {/* Sleek Glowing Live Counter */}
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4, fontSize: 11, color: jdText.length > 4000 ? "#ef4444" : "#666" }}>
+              Characters: <span style={{ color: jdText.length > 0 ? "#F59E0B" : "#666", marginLeft: 4 }}>{jdText.length}</span> / 5000
+            </div>
             <button onClick={handleJDMatch} disabled={jdLoading}
               style={{ marginTop: 12, padding: "12px 28px", borderRadius: 10, border: "none", background: jdLoading ? "#1a1a2a" : "linear-gradient(135deg, #F59E0B, #F97316)", color: jdLoading ? "#444" : "#000", fontWeight: 800, cursor: jdLoading ? "not-allowed" : "pointer", fontSize: 14 }}>
               {jdLoading ? "Mapping Keywords..." : "Calculate Match Metrics"}
