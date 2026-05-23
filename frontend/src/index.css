@@ -27,3 +27,59 @@ body {
   font-family: 'Segoe UI', sans-serif;
   background: #f4f6f8;
 }
+
+/* Premium Global Design Updates */
+body {
+  background: #030014 !important;
+  background-image: 
+    radial-gradient(circle at 10% 20%, rgba(245, 158, 11, 0.03) 0%, transparent 40%),
+    radial-gradient(circle at 90% 80%, rgba(249, 115, 22, 0.03) 0%, transparent 40%) !important;
+}
+
+/* Glassmorphism Dynamic Cards */
+.premium-card {
+  background: rgba(255, 255, 255, 0.02) !important;
+  backdrop-filter: blur(16px) saturate(120%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(120%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.premium-card:hover {
+  border-color: rgba(245, 158, 11, 0.3) !important;
+  box-shadow: 0 8px 32px 0 rgba(245, 158, 11, 0.05) !important;
+  transform: translateY(-2px);
+}
+
+/* Sleek Glowing Inputs */
+.premium-input {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 12px !important;
+  color: #fff !important;
+  transition: all 0.2s ease !important;
+}
+
+.premium-input:focus {
+  border-color: #F59E0B !important;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.2) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Custom Scrollbar for Aesthetic Layouts */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #030014;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(245, 158, 11, 0.2);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 158, 11, 0.4);
+}
