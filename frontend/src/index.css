@@ -117,3 +117,35 @@ body {
     transform: translateY(0);
   }
 }
+
+/* Custom Thin Gold Scrollbar for Textareas and Panels */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #080810 !important;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(245, 158, 11, 0.15) !important;
+  border-radius: 99px !important;
+  transition: all 0.3s ease !important;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #F59E0B, #F97316) !important;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.4) !important;
+}
+
+/* Micro-interactions for Lists and Panels */
+.premium-card {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.premium-card:hover {
+  border-color: rgba(245, 158, 11, 0.25) !important;
+  box-shadow: 0 12px 40px 0 rgba(245, 158, 11, 0.04) !important;
+  transform: translateY(-2px);
+}
