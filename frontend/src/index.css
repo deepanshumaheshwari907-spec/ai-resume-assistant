@@ -53,7 +53,7 @@ body {
   transform: translateY(-2px);
 }
 
-/* Sleek Glowing Inputs */
+/* Sleek Glowing Inputs & File Uploader */
 .premium-input {
   background: rgba(255, 255, 255, 0.03) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
@@ -66,6 +66,24 @@ body {
   border-color: #F59E0B !important;
   box-shadow: 0 0 12px rgba(245, 158, 11, 0.2) !important;
   background: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Custom File Upload Button Accent */
+.premium-file-input::-webkit-file-upload-button {
+  background: linear-gradient(135deg, #F59E0B, #F97316) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  color: #000 !important;
+  font-weight: 700 !important;
+  padding: 6px 12px !important;
+  margin-right: 12px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.premium-file-input::-webkit-file-upload-button:hover {
+  transform: scale(1.02);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.4) !important;
 }
 
 /* Custom Scrollbar for Aesthetic Layouts */

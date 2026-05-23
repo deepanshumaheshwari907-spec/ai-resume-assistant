@@ -283,7 +283,8 @@ export default function Dashboard() {
               <input value={jobRole} onChange={e => setJobRole(e.target.value)}
                 placeholder="e.g. Software Engineer"
                 list="job-roles"
-                style={{ width: "100%", padding: "11px 14px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", color: "#fff", fontSize: 14, outline: "none", boxSizing: "border-box" }}
+                className="premium-input"
+                style={{ width: "100%", padding: "11px 14px",fontSize: 14, outline: "none", boxSizing: "border-box" }}
               />
               <datalist id="job-roles">
                 <option value="Software Engineer" />
@@ -300,7 +301,8 @@ export default function Dashboard() {
             <div>
               <label style={{ fontSize: 12, color: "#888", display: "block", marginBottom: 8, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Resume (PDF Only)</label>
               <input type="file" accept=".pdf" onChange={e => setFile(e.target.files[0])}
-                style={{ width: "100%", padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", color: "#aaa", fontSize: 13, boxSizing: "border-box" }}
+              className="premium-file-input premium-input"
+              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", color: "#aaa", fontSize: 13, boxSizing: "border-box" }}
               />
             </div>
           </div>
