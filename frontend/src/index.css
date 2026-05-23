@@ -83,3 +83,19 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(245, 158, 11, 0.4);
 }
+
+/* Smooth Tab Transition Animations */
+.tab-content-active {
+  animation: smoothFadeUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes smoothFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

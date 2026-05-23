@@ -352,7 +352,7 @@ export default function Dashboard() {
         </div>
 
         {activeTab === "analyze" && result && (
-          <div className="premium-card" style={{ padding: isMobile ? 16 : 24 }}>
+          <div className="premium-card tab-content-active" style={{ padding: isMobile ? 16 : 24 }}>
             <div style={{ marginBottom: 28 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <span style={{ color: "#aaa", fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Overall ATS Score</span>
@@ -408,7 +408,7 @@ export default function Dashboard() {
         )}
 
         {activeTab === "rewrite" && rewritten && (
-          <div className="premium-card" style={{ padding: isMobile ? 16 : 24 }}>
+          <div className="premium-card tab-content-active" style={{ padding: isMobile ? 16 : 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <h3 style={{ fontWeight: 800 }}>✨ Recruiter-Ready Structure</h3>
               <button onClick={downloadPDF} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "linear-gradient(135deg, #F59E0B, #F97316)", color: "#000", cursor: "pointer", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
@@ -420,7 +420,7 @@ export default function Dashboard() {
         )}
 
         {activeTab === "interview" && showChat && (
-          <div className="premium-card" style={{ overflow: "hidden", padding: 0 }}>
+          <div className="premium-card tab-content-active" style={{ overflow: "hidden", padding: 0 }}>
             <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <div style={{ width: 8, height: 8, borderRadius: 99, background: interviewEnded ? "#ef4444" : "#22c55e" }} />
@@ -456,7 +456,7 @@ export default function Dashboard() {
         )}
 
         {activeTab === "jd" && (
-          <div className="premium-card" style={{ padding: isMobile ? 16 : 24 }}>
+          <div className="premium-card tab-content-active" style={{ padding: isMobile ? 16 : 24 }}>
             <h3 style={{ fontWeight: 800, marginBottom: 4 }}>🎯 Job Description Alignment</h3>
             <p style={{ fontSize: 13, color: "#666", marginBottom: 16 }}>Paste exact role requirements to evaluate compliance</p>
             <textarea value={jdText} onChange={e => setJdText(e.target.value)}
@@ -502,7 +502,7 @@ export default function Dashboard() {
         )}
 
         {activeTab === "cover" && coverLetter && (
-          <div className="premium-card" style={{ padding: isMobile ? 16 : 24 }}>
+          <div className="premium-card tab-content-active" style={{ padding: isMobile ? 16 : 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <h3 style={{ fontWeight: 800 }}>📝 Dynamic Pitch Structure</h3>
               <div style={{ display: "flex", gap: 8 }}>
@@ -534,7 +534,7 @@ export default function Dashboard() {
         )}
 
         {activeTab === "history" && (
-          <div className="premium-card" style={{ padding: isMobile ? 16 : 24 }}>
+          <div className="premium-card tab-content-active" style={{ padding: isMobile ? 16 : 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <h3 style={{ fontWeight: 800 }}>📊 Previous Evaluations</h3>
               <button onClick={fetchHistory} disabled={historyLoading}
