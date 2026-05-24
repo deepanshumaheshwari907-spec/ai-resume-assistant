@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import api from "../utils/api";
 import toast from "react-hot-toast";
 import { User, Mail, Lock, ShieldCheck, ArrowRight } from "lucide-react";
 
 export default function Signup() {
-  const { signup, login } = useAuth();
+  const { signup } = useAuth();
 
   // Form States
   const [name, setName] = useState("");
@@ -36,20 +36,23 @@ export default function Signup() {
     }
   };
 
-  // Handle OTP Verification Submit
+  // Handle OTP Verification & Local Storage Session Mapping
   const handleOtpSubmit = async (e) => {
     e.preventDefault();
     if (otp.length !== 6) return toast.error("Please enter a valid 6-digit OTP");
 
     setOtpLoading(true);
     try {
-      // Direct post check to verification endpoint
+      // Post validation credentials directly to the core backend router
       const res = await api.post("/auth/verify-otp", { email, otp });
       toast.success("Account verified successfully! 🎉");
       
-      // Token save and state login process logic match
+      // Locking authentication payload securely inside local states
       localStorage.setItem("token", res.data.token);
-      window.location.href = "/dashboard"; // Direct refresh route redirection to load premium context safely
+      localStorage.setItem("user", JSON.stringify(res.data.user)); // 👈 Ye dashboard profile validation ke liye jodd diya hai
+      
+      // Enforcing structural application refresh to clean contextual layout components safely
+      window.location.href = "/dashboard"; 
     } catch (err) {
       toast.error(err.response?.data?.detail || "Invalid OTP code. Please try again.");
     } finally {

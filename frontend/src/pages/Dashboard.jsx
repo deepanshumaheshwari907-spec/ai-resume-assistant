@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import api from "../utils/api";
 import toast from "react-hot-toast";
 import jsPDF from "jspdf";
-import { LogOut, Zap, Download, CheckCircle, AlertCircle, Send } from "lucide-react";
+import { LogOut, Zap, Download, CheckCircle, AlertCircle, Send, RefreshCw } from "lucide-react";
 
 export default function Dashboard() {
   const { user, logout, refreshUser } = useAuth();
@@ -41,6 +41,29 @@ export default function Dashboard() {
   const [displayScore, setDisplayScore] = useState(0);
   const [interviewEnded, setInterviewEnded] = useState(false);
   const [interviewScore, setInterviewScore] = useState(null);
+
+  // Smart Dynamic Loader Messages List
+  const loaderTexts = [
+    "Reading document format layers... 📄",
+    "Extracting key technical skillsets... 🧠",
+    "Mapping compliance parameters with Groq LLM... 🎯",
+    "Comparing with real-time market ATS triggers... ⚡",
+    "Generating structural improvement metrics... ✨"
+  ];
+  const [currentLoaderText, setCurrentLoaderText] = useState(loaderTexts[0]);
+
+  // Effect to rotate loading messages automatically
+  useEffect(() => {
+    let interval;
+    if (loading) {
+      let index = 0;
+      interval = setInterval(() => {
+        index = (index + 1) % loaderTexts.length;
+        setCurrentLoaderText(loaderTexts[index]);
+      }, 4000); // Changes text every 4 seconds
+    }
+    return () => clearInterval(interval);
+  }, [loading]);
 
   const handleLogout = () => { logout(); navigate("/"); };
 
@@ -169,6 +192,15 @@ export default function Dashboard() {
       setMessages([{ text: res.data.next_question || "Tell me about yourself.", sender: "ai" }]);
     } catch { toast.error("Failed to start interview"); }
     finally { setChatLoading(false); }
+  };
+
+  const handleInterviewRestart = () => {
+    setMessages([]);
+    setInput("");
+    setInterviewEnded(false);
+    setInterviewScore(null);
+    startInterview();
+    toast.success("Interview panel reset! New session started. 🎤");
   };
 
   const sendMessage = async () => {
@@ -314,7 +346,13 @@ export default function Dashboard() {
                 style={{ padding: "12px 28px", borderRadius: 10, border: "none", background: loading ? "#1a1a2a" : "linear-gradient(135deg, #F59E0B, #F97316)", color: loading ? "#444" : "#000", fontWeight: 800, cursor: loading ? "not-allowed" : "pointer", fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
                 <Zap size={16} /> {loading ? "AI Analyzing..." : "Analyze My Resume"}
               </button>
-              {loading && <p style={{ marginTop: 10, fontSize: 13, color: "#F59E0B" }}>⏳ Premium AI engine is processing... Takes 20-30 seconds.</p>}
+              {loading && (
+                <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10, background: "rgba(245,158,11,0.03)", border: "1px solid rgba(245,158,11,0.1)", padding: "12px 16px", borderRadius: 10 }}>
+                  <span style={{ color: "#F59E0B", fontSize: 13, fontWeight: 600 }}>
+                    {currentLoaderText}
+                  </span>
+                </div>
+              )}
             </>
           )}
 
@@ -429,7 +467,14 @@ export default function Dashboard() {
                 <div style={{ width: 8, height: 8, borderRadius: 99, background: interviewEnded ? "#ef4444" : "#22c55e" }} />
                 <span style={{ fontSize: 14, color: "#aaa", fontWeight: 600 }}>{interviewEnded ? "Session Wrapped" : "Interactive Mock Panel"}</span>
               </div>
-              {interviewEnded && <span style={{ background: "rgba(34,197,94,0.1)", color: "#22c55e", padding: "4px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700 }}>Score: {interviewScore}/100</span>}
+              {interviewEnded && (
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ background: "rgba(34,197,94,0.1)", color: "#22c55e", padding: "4px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700 }}>Score: {interviewScore}/100</span>
+                  <button onClick={handleInterviewRestart} style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(245,158,11,0.1)", color: "#F59E0B", border: "1px solid rgba(245,158,11,0.2)", padding: "4px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                    <RefreshCw size={12} /> Restart
+                  </button>
+                </div>
+              )}
             </div>
             
             <div style={{ height: 320, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
@@ -441,13 +486,21 @@ export default function Dashboard() {
                 </div>
               ))}
               {chatLoading && <div style={{ color: "#F59E0B", fontSize: 13 }}>🤔 AI Panel evaluating...</div>}
+              {interviewEnded && (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: 20, background: "rgba(255,255,255,0.01)", border: "1px dashed rgba(255,255,255,0.08)", borderRadius: 12, marginTop: 10 }}>
+                  <p style={{ fontSize: 13, color: "#aaa", textAlign: "center", margin: 0 }}>The continuous evaluation pool metrics limit has been wrapped up. Ready to trigger another session loop?</p>
+                  <button onClick={handleInterviewRestart} style={{ display: "flex", alignItems: "center", gap: 6, background: "linear-gradient(135deg, #F59E0B, #F97316)", color: "#000", border: "none", padding: "8px 20px", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 14px rgba(245,158,11,0.2)" }}>
+                    <RefreshCw size={13} /> Start Fresh Mock Interview
+                  </button>
+                </div>
+              )}
             </div>
 
             <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: 10 }}>
               <input value={input} onChange={e => setInput(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && sendMessage()}
                 disabled={interviewEnded}
-                placeholder={interviewEnded ? "Session closed. Refresh to restart." : "Provide your answers clearly..."}
+                placeholder={interviewEnded ? "Session completed. Trigger 'Start Fresh Mock Interview' loop." : "Provide your answers clearly..."}
                 style={{ flex: 1, padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", color: "#fff", fontSize: 14, outline: "none" }}
               />
               <button onClick={sendMessage} disabled={chatLoading || interviewEnded}
