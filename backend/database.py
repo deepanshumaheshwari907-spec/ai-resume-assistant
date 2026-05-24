@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean  # 👈 Yahan Boolean import fix kar diya hai
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
@@ -23,6 +23,8 @@ class User(Base):
     usage_count = Column(Integer, default=0)
     analysis_limit = Column(Integer, default=2)
     created_at = Column(DateTime, default=datetime.utcnow)
+    is_verified = Column(Boolean, default=False)  # Airtight Email status track
+    otp_code = Column(String, nullable=True)       # Temp 6-digit verification holder
 
 class ResumeAnalysis(Base):
     __tablename__ = "resume_analyses"

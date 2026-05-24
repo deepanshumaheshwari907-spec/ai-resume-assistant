@@ -24,13 +24,12 @@ export function AuthProvider({ children }) {
     return user;
   };
 
+  // 📝 Updated for OTP Verification Flow
   const signup = async (name, email, password) => {
     const res = await api.post("/auth/signup", { name, email, password });
-    const { token, user } = res.data;
-    localStorage.setItem("token", token);
-    localStorage.setItem("user", JSON.stringify(user));
-    setUser(user);
-    return user;
+    // Abhi token nahi milega, pehle mail par OTP dispatch hoga
+    // Isliye sirf response return karenge taaki Signup.jsx screen toggle kar sake
+    return res.data;
   };
 
   const logout = () => {

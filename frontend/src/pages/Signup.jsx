@@ -1,85 +1,139 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import api from "../utils/api";
 import toast from "react-hot-toast";
+import { User, Mail, Lock, ShieldCheck, ArrowRight } from "lucide-react";
 
 export default function Signup() {
+  const { signup, login } = useAuth();
+
+  // Form States
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const { signup } = useAuth();
-  const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
+  // OTP Flow States
+  const [showOtpScreen, setShowOtpScreen] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [otpLoading, setOtpLoading] = useState(false);
+
+  // Handle Initial Signup Submit
+  const handleSignupSubmit = async (e) => {
     e.preventDefault();
-    if (!name || !email || !password) return toast.error("Fill all fields");
-    if (password.length < 6) return toast.error("Password must be 6+ characters");
-    if (!email.includes("@")) return toast.error("Enter valid email");
+    if (!name || !email || !password) return toast.error("Please fill all fields");
+    
     setLoading(true);
     try {
-      await signup(name, email, password);
-      toast.success("Account created! Welcome 🎉");
-      navigate("/dashboard");
+      const data = await signup(name, email, password);
+      toast.success(data.message || "OTP sent to your email! ✉️");
+      setShowOtpScreen(true); // Switch to OTP Screen layout dynamically
     } catch (err) {
       toast.error(err.response?.data?.detail || "Signup failed. Try again.");
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle OTP Verification Submit
+  const handleOtpSubmit = async (e) => {
+    e.preventDefault();
+    if (otp.length !== 6) return toast.error("Please enter a valid 6-digit OTP");
+
+    setOtpLoading(true);
+    try {
+      // Direct post check to verification endpoint
+      const res = await api.post("/auth/verify-otp", { email, otp });
+      toast.success("Account verified successfully! 🎉");
+      
+      // Token save and state login process logic match
+      localStorage.setItem("token", res.data.token);
+      window.location.href = "/dashboard"; // Direct refresh route redirection to load premium context safely
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Invalid OTP code. Please try again.");
+    } finally {
+      setOtpLoading(false);
+    }
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#080810", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "#080810", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", fontFamily: "'Segoe UI', system-ui, sans-serif", color: "#fff" }}>
+      
+      {/* Background Decorative Radial Glows */}
+      <div style={{ position: "absolute", width: "400px", height: "400px", background: "radial-gradient(circle, rgba(245, 158, 11, 0.04) 0%, transparent 70%)", top: "10%", left: "15%", pointerEvents: "none" }} />
+      <div style={{ position: "absolute", width: "400px", height: "400px", background: "radial-gradient(circle, rgba(79, 70, 229, 0.03) 0%, transparent 70%)", bottom: "10%", right: "15%", pointerEvents: "none" }} />
 
-      <div style={{ position: "fixed", top: "30%", left: "50%", transform: "translateX(-50%)", width: 500, height: 300, background: "radial-gradient(ellipse, rgba(245,158,11,0.06) 0%, transparent 70%)", pointerEvents: "none" }} />
-
-      <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 20, padding: "44px 40px", width: "100%", maxWidth: 420, position: "relative" }}>
-
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ fontSize: 26, fontWeight: 900, color: "#fff", letterSpacing: "-0.5px" }}>
-            Resume<span style={{ color: "#F59E0B" }}>AI</span>
-          </div>
-          <div style={{ fontSize: 13, color: "#444", marginTop: 4 }}>AI-Powered Resume Assistant</div>
+      <div className="premium-card animate-fade-in" style={{ width: "100%", maxWidth: "420px", background: "rgba(255, 255, 255, 0.02)", border: "1px solid rgba(255, 255, 255, 0.06)", borderRadius: "24px", padding: "32px", backdropFilter: "blur(20px)", boxShadow: "0 20px 40px rgba(0,0,0,0.4)" }}>
+        
+        {/* LOGO STANDARDS */}
+        <div style={{ textAlign: "center", marginBottom: "28px" }}>
+          <div style={{ fontSize: "28px", fontWeight: 900, letterSpacing: "-0.03em" }}>Resume<span style={{ color: "#F59E0B" }}>AI</span></div>
+          <p style={{ color: "#555", fontSize: "13px", marginTop: "4px" }}>The Intelligent Recruiter Pipeline Layer</p>
         </div>
 
-        <h2 style={{ fontSize: 22, fontWeight: 800, color: "#fff", margin: "0 0 6px" }}>Create free account 🚀</h2>
-        <p style={{ color: "#555", fontSize: 14, marginBottom: 28 }}>2 free analyses/month — no credit card needed</p>
+        {!showOtpScreen ? (
+          /* REGULAR SIGNUP FORM LAYOUT */
+          <form onSubmit={handleSignupSubmit} style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+            <div>
+              <label style={{ fontSize: "12px", color: "#888", fontWeight: 600, display: "block", marginBottom: "6px", textTransform: "uppercase" }}>Full Name</label>
+              <div style={{ position: "relative" }}>
+                <User size={16} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#555" }} />
+                <input type="text" placeholder="John Doe" value={name} onChange={e => setName(e.target.value)} className="premium-input" style={{ width: "100%", padding: "12px 14px 12px 42px", fontSize: "14px", outline: "none", boxSizing: "border-box" }} />
+              </div>
+            </div>
 
-        <form onSubmit={handleSubmit}>
-          <label style={{ display: "block", fontSize: 13, color: "#777", marginBottom: 6 }}>Full Name</label>
-          <input value={name} onChange={e => setName(e.target.value)}
-            placeholder="Rahul Sharma"
-            style={{ width: "100%", padding: "12px 16px", borderRadius: 10, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#fff", fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 16 }}
-          />
+            <div>
+              <label style={{ fontSize: "12px", color: "#888", fontWeight: 600, display: "block", marginBottom: "6px", textTransform: "uppercase" }}>Email Address</label>
+              <div style={{ position: "relative" }}>
+                <Mail size={16} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#555" }} />
+                <input type="email" placeholder="name@company.com" value={email} onChange={e => setEmail(e.target.value)} className="premium-input" style={{ width: "100%", padding: "12px 14px 12px 42px", fontSize: "14px", outline: "none", boxSizing: "border-box" }} />
+              </div>
+            </div>
 
-          <label style={{ display: "block", fontSize: 13, color: "#777", marginBottom: 6 }}>Email Address</label>
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-            placeholder="you@email.com"
-            style={{ width: "100%", padding: "12px 16px", borderRadius: 10, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#fff", fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 16 }}
-          />
+            <div>
+              <label style={{ fontSize: "12px", color: "#888", fontWeight: 600, display: "block", marginBottom: "6px", textTransform: "uppercase" }}>Password</label>
+              <div style={{ position: "relative" }}>
+                <Lock size={16} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#555" }} />
+                <input type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} className="premium-input" style={{ width: "100%", padding: "12px 14px 12px 42px", fontSize: "14px", outline: "none", boxSizing: "border-box" }} />
+              </div>
+            </div>
 
-          <label style={{ display: "block", fontSize: 13, color: "#777", marginBottom: 6 }}>Password</label>
-          <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-            placeholder="Min. 6 characters"
-            style={{ width: "100%", padding: "12px 16px", borderRadius: 10, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#fff", fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 8 }}
-          />
-          <p style={{ fontSize: 12, color: "#444", marginBottom: 24 }}>Use at least 6 characters</p>
+            <button type="submit" disabled={loading} style={{ width: "100%", padding: "13px", borderRadius: "12px", border: "none", background: loading ? "#1a1a2a" : "linear-gradient(135deg, #F59E0B, #F97316)", color: loading ? "#444" : "#000", fontWeight: 700, fontSize: "14px", cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginTop: "10px", transition: "all 0.2s" }}>
+              {loading ? "Dispatched Security Signals..." : "Create Premium Account"} <ArrowRight size={16} />
+            </button>
 
-          <button type="submit" disabled={loading}
-            style={{ width: "100%", padding: "13px", borderRadius: 10, border: "none", background: loading ? "#333" : "linear-gradient(135deg, #F59E0B, #F97316)", color: loading ? "#666" : "#000", fontWeight: 800, fontSize: 15, cursor: loading ? "not-allowed" : "pointer", boxShadow: loading ? "none" : "0 4px 20px rgba(245,158,11,0.3)" }}>
-            {loading ? "Creating account..." : "Create Free Account →"}
-          </button>
-        </form>
+            <div style={{ textAlign: "center", fontSize: "13px", color: "#666", marginTop: "10px" }}>
+              Already registered? <Link to="/login" style={{ color: "#F59E0B", textDecoration: "none", fontWeight: 600 }}>Sign In</Link>
+            </div>
+          </form>
+        ) : (
+          /* PREMIUM GLASSMORPHIC OTP SCREEN LAYOUT */
+          <form onSubmit={handleOtpSubmit} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            <div style={{ textAlign: "center", background: "rgba(245,158,11,0.03)", border: "1px solid rgba(245,158,11,0.1)", padding: "12px", borderRadius: "12px", marginBottom: "4px" }}>
+              <p style={{ fontSize: "13px", color: "#ccc", lineHeight: "1.5" }}>We have sent a verification security key to <br/><span style={{ color: "#F59E0B", fontWeight: 600 }}>{email}</span></p>
+            </div>
 
-        <div style={{ marginTop: 20, padding: 14, borderRadius: 10, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.12)", fontSize: 13, color: "#888", textAlign: "center" }}>
-          ✓ Free forever &nbsp;·&nbsp; ✓ No credit card &nbsp;·&nbsp; ✓ Instant access
-        </div>
+            <div>
+              <label style={{ fontSize: "12px", color: "#888", fontWeight: 600, display: "block", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "center" }}>Enter 6-Digit Verification Code</label>
+              <div style={{ position: "relative" }}>
+                <ShieldCheck size={18} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#F59E0B" }} />
+                <input type="text" maxLength="6" placeholder="e.g. 123456" value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, ""))} className="premium-input" style={{ width: "100%", padding: "13px 14px 13px 44px", fontSize: "16px", fontWeight: "bold", letterSpacing: "4px", textAlign: "center", outline: "none", boxSizing: "border-box" }} />
+              </div>
+            </div>
 
-        <div style={{ textAlign: "center", marginTop: 20, fontSize: 14, color: "#444" }}>
-          Already have account?{" "}
-          <Link to="/login" style={{ color: "#F59E0B", textDecoration: "none", fontWeight: 600 }}>Login</Link>
-        </div>
-        <div style={{ textAlign: "center", marginTop: 10 }}>
-          <Link to="/" style={{ color: "#333", textDecoration: "none", fontSize: 13 }}>← Back to home</Link>
-        </div>
+            <button type="submit" disabled={otpLoading} style={{ width: "100%", padding: "13px", borderRadius: "12px", border: "none", background: otpLoading ? "#1a1a2a" : "linear-gradient(135deg, #F59E0B, #F97316)", color: otpLoading ? "#444" : "#000", fontWeight: 800, fontSize: "14px", cursor: otpLoading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", boxShadow: "0 4px 20px rgba(245,158,11,0.15)" }}>
+              {otpLoading ? "Verifying Credentials..." : "Activate Dashboard Access 🎉"}
+            </button>
+
+            <div style={{ textAlign: "center" }}>
+              <button type="button" onClick={() => setShowOtpScreen(false)} style={{ background: "transparent", border: "none", color: "#666", fontSize: "12px", cursor: "pointer", textDecoration: "underline" }}>
+                ← Back to registration details
+              </button>
+            </div>
+          </form>
+        )}
+
       </div>
     </div>
   );

@@ -179,7 +179,6 @@ export default function Dashboard() {
     const updatedMessages = [...messages, { text: userMsg, sender: "user" }];
     setMessages(updatedMessages);
 
-    // Safer State Evaluation Inside Action Block (Fixed Crash Loop)
     if (updatedMessages.length >= 8) {
       setInterviewEnded(true);
       const score = Math.floor(Math.random() * 30) + 65;
@@ -203,6 +202,7 @@ export default function Dashboard() {
     if (!file) return toast.error("Upload resume first");
     if (!jdText.trim()) return toast.error("Paste job description first");
     if (jdText.length > 5000) return toast.error("Job description is too long! Max 5000 chars.");
+    
     const formData = new FormData();
     formData.append("file", file);
     formData.append("job_description", jdText);
@@ -285,7 +285,7 @@ export default function Dashboard() {
                 placeholder="e.g. Software Engineer"
                 list="job-roles"
                 className="premium-input"
-                style={{ width: "100%", padding: "11px 14px",fontSize: 14, outline: "none", boxSizing: "border-box" }}
+                style={{ width: "100%", padding: "11px 14px", fontSize: 14, outline: "none", boxSizing: "border-box" }}
               />
               <datalist id="job-roles">
                 <option value="Software Engineer" />
@@ -298,12 +298,12 @@ export default function Dashboard() {
                 <option value="AI Engineer" />
                 <option value="DevOps Engineer" />
               </datalist>
-            </div> 
+            </div>
             <div>
               <label style={{ fontSize: 12, color: "#888", display: "block", marginBottom: 8, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Resume (PDF Only)</label>
               <input type="file" accept=".pdf" onChange={e => setFile(e.target.files[0])}
-              className="premium-file-input premium-input"
-              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", color: "#aaa", fontSize: 13, boxSizing: "border-box" }}
+                className="premium-file-input premium-input"
+                style={{ width: "100%", padding: "10px 14px", boxSizing: "border-box" }}
               />
             </div>
           </div>
@@ -478,8 +478,8 @@ export default function Dashboard() {
             {jdResult && (
               <div style={{ marginTop: 24 }}>
                 <div style={{ marginBottom: 20 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                    <span style={{ fontSize: 13, color: "#aaa", fontWeight: 600 }}>Sync Ratio</span>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontWight: 600, alignItems: "center", marginBottom: 10 }}>
+                    <span style={{ fontSize: 13, color: "#aaa" }}>Sync Ratio</span>
                     <span style={{ fontWeight: 900, fontSize: 22, color: jdResult.match_score >= 70 ? "#22c55e" : "#F59E0B" }}>{jdResult.match_score}%</span>
                   </div>
                   <div style={{ height: 10, background: "rgba(255,255,255,0.05)", borderRadius: 99, overflow: "hidden" }}>
