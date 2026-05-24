@@ -1,70 +1,173 @@
-# Getting Started with Create React App
+# ResumeAI 🚀
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+> **AI-Powered Resume Analyzer & Career Assistant**  
+> Get hired faster with AI that knows what recruiters want.
 
-## Available Scripts
+🌐 **Live Demo:** [ai-resume-assistant-cyan.vercel.app](https://ai-resume-assistant-cyan.vercel.app)
 
-In the project directory, you can run:
+---
 
-### `npm start`
+## ✨ Features
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+| Feature | Description |
+|---------|-------------|
+| 🔍 **ATS Score Analysis** | Get your exact ATS score with detailed breakdown |
+| ✨ **AI Resume Rewrite** | AI rewrites your resume with power verbs & keywords |
+| 🎤 **Mock Interview Bot** | Practice with AI interviewer, get real feedback |
+| 🎯 **JD Match Score** | See how well your resume matches any job description |
+| 📝 **Cover Letter AI** | Generate personalized cover letters in seconds |
+| 📊 **Resume History** | Track your improvement over time |
+| 📄 **PDF Download** | Download ATS-friendly resume as PDF |
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+---
 
-### `npm test`
+## 🛠️ Tech Stack
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+**Frontend:**
+- React.js
+- React Router DOM
+- Axios
+- jsPDF
+- Lucide React
+- React Hot Toast
 
-### `npm run build`
+**Backend:**
+- FastAPI (Python)
+- SQLAlchemy
+- PostgreSQL (Supabase)
+- JWT Authentication
+- Groq AI (LLaMA 3)
+- pdfplumber
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+**Deployment:**
+- Frontend → Vercel
+- Backend → Render
+- Database → Supabase
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+---
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## 🚀 Getting Started
 
-### `npm run eject`
+### Prerequisites
+- Node.js 18+
+- Python 3.11+
+- Groq API Key ([console.groq.com](https://console.groq.com))
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+### Frontend Setup
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+```bash
+cd frontend
+npm install
+```
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+Create `.env` file in `frontend/`:
+```
+REACT_APP_API_URL=http://127.0.0.1:8000
+```
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+```bash
+npm start
+```
 
-## Learn More
+### Backend Setup
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+```bash
+cd backend
+python -m venv venv
+venv\Scripts\activate  # Windows
+pip install -r requirements.txt
+```
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+Create `.env` file in `backend/`:
+```
+GROQ_API_KEY=your_groq_api_key_here
+SECRET_KEY=your_secret_key_here
+DATABASE_URL=sqlite:///./resumeai.db
+```
 
-### Code Splitting
+```bash
+uvicorn main:app --reload
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+---
 
-### Analyzing the Bundle Size
+## 📁 Project Structure
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+```
+ai-resume-assistant/
+├── frontend/
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── LandingPage.jsx
+│   │   │   ├── Dashboard.jsx
+│   │   │   ├── Login.jsx
+│   │   │   ├── Signup.jsx
+│   │   │   ├── Terms.jsx
+│   │   │   └── NotFound.jsx
+│   │   ├── context/
+│   │   │   └── AuthContext.jsx
+│   │   ├── utils/
+│   │   │   ├── api.js
+│   │   │   └── constants.js
+│   │   └── components/
+│   │       └── ProtectedRoute.jsx
+│   └── public/
+├── backend/
+│   ├── main.py
+│   ├── database.py
+│   ├── auth.py
+│   └── requirements.txt
+└── README.md
+```
 
-### Making a Progressive Web App
+---
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+## 🔑 API Endpoints
 
-### Advanced Configuration
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/auth/signup` | Create account |
+| POST | `/auth/login` | Login |
+| GET | `/auth/me` | Get current user |
+| POST | `/upload-resume` | Analyze resume |
+| POST | `/rewrite` | Rewrite resume |
+| POST | `/chat` | Mock interview |
+| POST | `/match-jd` | JD match score |
+| POST | `/cover-letter` | Generate cover letter |
+| GET | `/history` | Resume history |
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+---
 
-### Deployment
+## 💰 Pricing
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+| Plan | Price | Features |
+|------|-------|---------|
+| Free | ₹0/month | 2 analyses/month, ATS Score |
+| Pro | ₹199/month | Unlimited + all features |
+| Elite | ₹499/month | Everything + LinkedIn optimization |
 
-### `npm run build` fails to minify
+---
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+## 🤝 Contributing
+
+Contributions are welcome! Feel free to open issues and pull requests.
+
+---
+
+## 📄 License
+
+MIT License — feel free to use this project.
+
+---
+
+## 👨‍💻 Built By
+
+**Deepanshu Maheshwari**  
+AI & ML Engineering Student  
+📧 deepanshumaheshwari907@gmail.com  
+🔗 [LinkedIn](https://www.linkedin.com/in/deepanshu-maheshwari/)  
+🐙 [GitHub](https://github.com/deepanshumaheshwari907-spec)
+
+---
+
+⭐ **Star this repo if you found it helpful!**
