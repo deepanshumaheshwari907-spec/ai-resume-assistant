@@ -4,21 +4,11 @@ import { useAuth } from "../context/AuthContext";
 import api from "../utils/api";
 import toast from "react-hot-toast";
 import jsPDF from "jspdf";
-import { LogOut, Zap, Download, CheckCircle, AlertCircle, Send, RefreshCw } from "lucide-react";
+import { LogOut, Zap, Download, CheckCircle, AlertCircle, Send } from "lucide-react";
 
 export default function Dashboard() {
   const { user, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
-  
-  // Dynamic Responsive State Fix
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
   const [file, setFile] = useState(null);
   const [jobRole, setJobRole] = useState("");
   const [result, setResult] = useState(null);
@@ -30,72 +20,61 @@ export default function Dashboard() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+
+  // Additional states for new features
   const [jdText, setJdText] = useState("");
   const [jdResult, setJdResult] = useState(null);
   const [jdLoading, setJdLoading] = useState(false);
   const [companyName, setCompanyName] = useState("");
   const [coverLetter, setCoverLetter] = useState(null);
   const [coverLoading, setCoverLoading] = useState(false);
-  const [history, setHistory] = useState([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [displayScore, setDisplayScore] = useState(0);
-  const [interviewEnded, setInterviewEnded] = useState(false);
-  const [interviewScore, setInterviewScore] = useState(null);
 
-  // Smart Dynamic Loader Messages List
+  // States for Student Metadata for Interview Report
+  const [showStudentPopup, setShowStudentPopup] = useState(false);
+  const [studentDetails, setStudentDetails] = useState({ age: "", branch: "" });
+
   const loaderTexts = [
-    "Reading document format layers... 📄",
-    "Extracting key technical skillsets... 🧠",
-    "Mapping compliance parameters with Groq LLM... 🎯",
-    "Comparing with real-time market ATS triggers... ⚡",
-    "Generating structural improvement metrics... ✨"
+    "Reading your resume...",
+    "Analyzing skills...",
+    "Matching with job description...",
+    "Generating ATS score..."
   ];
-  const [currentLoaderText, setCurrentLoaderText] = useState(loaderTexts[0]);
 
-  // Effect to rotate loading messages automatically
+  const [loaderText, setLoaderText] = useState(loaderTexts[0]);
+
   useEffect(() => {
-    let interval;
-    if (loading) {
-      let index = 0;
-      interval = setInterval(() => {
-        index = (index + 1) % loaderTexts.length;
-        setCurrentLoaderText(loaderTexts[index]);
-      }, 4000); // Changes text every 4 seconds
-    }
+    if (!loading && !rewriteLoading && !jdLoading && !coverLoading) return;
+    let i = 0;
+    const interval = setInterval(() => {
+      i = (i + 1) % loaderTexts.length;
+      setLoaderText(loaderTexts[i]);
+    }, 3000);
     return () => clearInterval(interval);
-  }, [loading]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, rewriteLoading, jdLoading, coverLoading]);
 
-  const handleLogout = () => { logout(); navigate("/"); };
+  const handleLogout = () => {
+    logout();
+    navigate("/");
+  };
 
   const handleAnalyze = async () => {
-    if (!file) return toast.error("Please upload a resume first");
+    if (!file) return toast.error("Please upload a resume");
     const formData = new FormData();
     formData.append("file", file);
     formData.append("job_role", jobRole || "Software Engineer");
     setLoading(true);
-    setResult(null);
-    setDisplayScore(0);
     try {
       const res = await api.post("/upload-resume", formData);
       setResult(res.data.result);
-      
-      let count = 0;
-      const target = res.data.result.score;
-      const timer = setInterval(() => {
-        count += 2;
-        if (count >= target) { 
-          setDisplayScore(target); 
-          clearInterval(timer); 
-        } else {
-          setDisplayScore(count);
-        }
-      }, 20);
-      
+      setRewritten(null);
       await refreshUser();
-      toast.success("Analysis complete! 🎉");
+      toast.success("Analysis complete!");
     } catch (err) {
       toast.error(err.response?.data?.detail || "Analysis failed. Try again.");
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleRewrite = async () => {
@@ -107,134 +86,115 @@ export default function Dashboard() {
     try {
       const res = await api.post("/rewrite", formData);
       setRewritten(res.data.rewritten_resume);
-      toast.success("Resume rewritten! ✨");
+      toast.success("Resume rewritten!");
     } catch (err) {
       toast.error(err.response?.data?.detail || "Rewrite failed");
-    } finally { setRewriteLoading(false); }
+    } finally {
+      setRewriteLoading(false);
+    }
   };
 
   const downloadPDF = () => {
     if (!rewritten) return toast.error("Rewrite resume first");
     const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 18;
-    const contentWidth = pageWidth - margin * 2;
-    let y = 22;
-    let isFirstLine = true;
-
-    const lines = rewritten.split("\n");
-
+    let y = 20;
+    doc.setFont("Times", "Normal");
+    const lines = doc.splitTextToSize(rewritten, 180);
     lines.forEach((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) { y += 3; return; }
-      if (y > 272) { doc.addPage(); y = 20; }
-
-      if (isFirstLine) {
-        doc.setFont("Helvetica", "bold");
-        doc.setFontSize(16);
-        doc.setTextColor(0, 0, 0);
-        doc.text(trimmed, pageWidth / 2, y, { align: "center" });
-        y += 7;
-        isFirstLine = false;
-      } else if (trimmed.includes("@") || trimmed.toLowerCase().includes("phone") || trimmed.toLowerCase().includes("github") || trimmed.toLowerCase().includes("linkedin") || (trimmed.includes("|") && trimmed.length < 100 && y < 40)) {
-        doc.setFont("Helvetica", "normal");
-        doc.setFontSize(9);
-        doc.setTextColor(60, 60, 60);
-        const wrapped = doc.splitTextToSize(trimmed, contentWidth);
-        wrapped.forEach(wl => { doc.text(wl, pageWidth / 2, y, { align: "center" }); y += 5; });
-        doc.setTextColor(0, 0, 0);
-      } else if (trimmed === trimmed.toUpperCase() && trimmed.length >= 3 && trimmed.length <= 35 && !trimmed.includes("@") && !/\d{4}/.test(trimmed)) {
-        y += 5;
-        doc.setFont("Helvetica", "bold");
+      if (line === line.toUpperCase() && line.length < 40 && !line.includes("@")) {
+        doc.setFont("Times", "Bold");
+        doc.setFontSize(14);
+        doc.text(line, 15, y);
+        y += 8;
+        doc.setFont("Times", "Normal");
         doc.setFontSize(11);
-        doc.setTextColor(0, 0, 0);
-        doc.text(trimmed, margin, y);
-        y += 3;
-        doc.setDrawColor(0, 0, 0);
-        doc.setLineWidth(0.4);
-        doc.line(margin, y, pageWidth - margin, y);
-        y += 6;
-      } else if (trimmed.startsWith("•") || trimmed.startsWith("-") || trimmed.startsWith("▸") || trimmed.startsWith("*")) {
-        doc.setFont("Helvetica", "normal");
-        doc.setFontSize(9.5);
-        doc.setTextColor(0, 0, 0);
-        const clean = "• " + trimmed.replace(/^[•\-▸]\s*/, "");
-        const wrapped = doc.splitTextToSize(clean, contentWidth - 6);
-        wrapped.forEach((wl, i) => { doc.text(wl, margin + (i > 0 ? 6 : 3), y); y += 5; });
-      } else if ((trimmed.includes("|") || trimmed.includes("–") || trimmed.includes("—")) && trimmed.length < 80) {
-        doc.setFont("Helvetica", "bold");
-        doc.setFontSize(10);
-        doc.setTextColor(0, 0, 0);
-        const wrapped = doc.splitTextToSize(trimmed, contentWidth);
-        wrapped.forEach(wl => { doc.text(wl, margin, y); y += 5.5; });
       } else {
-        doc.setFont("Helvetica", "normal");
-        doc.setFontSize(9.5);
-        doc.setTextColor(0, 0, 0);
-        const wrapped = doc.splitTextToSize(trimmed, contentWidth);
-        wrapped.forEach(wl => { doc.text(wl, margin, y); y += 5; });
+        doc.setFontSize(11);
+        doc.text(line, 15, y);
+        y += 6;
       }
-
-      if (y > 272) { doc.addPage(); y = 20; }
+      if (y > 280) {
+        doc.addPage();
+        y = 20;
+      }
     });
+    doc.save("resume-rewritten.pdf");
+    toast.success("PDF downloaded!");
+  };
 
-    doc.save("ResumeAI-Resume.pdf");
-    toast.success("ATS-Friendly PDF downloaded! 📄");
+  // Step 1: Open student metadata collection popup before starting the interview
+  const triggerInterviewDetails = () => {
+    setShowStudentPopup(true);
   };
 
   const startInterview = async () => {
+    if (!studentDetails.age || !studentDetails.branch) {
+      return toast.error("Please fill all fields first");
+    }
+    setShowStudentPopup(false);
     setShowChat(true);
     setChatLoading(true);
-    setInterviewEnded(false);
-    setInterviewScore(null);
     try {
       const res = await api.post("/chat", { answer: "Start interview", history: "" });
       setMessages([{ text: res.data.next_question || "Tell me about yourself.", sender: "ai" }]);
-    } catch { toast.error("Failed to start interview"); }
-    finally { setChatLoading(false); }
+    } catch {
+      toast.error("Failed to start interview");
+    } finally {
+      setChatLoading(false);
+    }
   };
 
-  const handleInterviewRestart = () => {
-    setMessages([]);
-    setInput("");
-    setInterviewEnded(false);
-    setInterviewScore(null);
-    startInterview();
-    toast.success("Interview panel reset! New session started. 🎤");
+  // Step 2: Exit interview and automatically send report to your Gmail backend API
+  const handleExitAndReport = async () => {
+    try {
+      toast.loading("Saving and generating report...");
+      const historySummary = messages.map((m) => `${m.sender}: ${m.text}`).join("\n");
+      
+      await api.post("/send-interview-report", {
+        name: user?.name || "Student",
+        email: user?.email || "N/A",
+        age: studentDetails.age,
+        branch: studentDetails.branch,
+        chat_history: historySummary
+      });
+
+      toast.dismiss();
+      toast.success("Interview report sent to Admin Email successfully! 📩");
+      setShowChat(false);
+      setMessages([]);
+    } catch {
+      toast.dismiss();
+      toast.error("Failed to send report, closing session.");
+      setShowChat(false);
+    }
   };
 
   const sendMessage = async () => {
-    if (!input.trim() || interviewEnded) return;
+    if (!input.trim()) return;
     const userMsg = input;
     setInput("");
-    
-    const updatedMessages = [...messages, { text: userMsg, sender: "user" }];
-    setMessages(updatedMessages);
-
-    if (updatedMessages.length >= 8) {
-      setInterviewEnded(true);
-      const score = Math.floor(Math.random() * 30) + 65;
-      setInterviewScore(score);
-      toast.success("Interview completed! Calculating score... 📊");
-      return;
-    }
-
+    setMessages((prev) => [...prev, { text: userMsg, sender: "user" }]);
     setChatLoading(true);
     try {
       const res = await api.post("/chat", {
         answer: userMsg,
-        history: messages.map(m => `${m.sender}: ${m.text}`).join("\n"),
+        history: messages.map((m) => `${m.sender}: ${m.text}`).join("\n"),
       });
-      setMessages(prev => [...prev, { text: res.data.feedback, sender: "ai" }, { text: res.data.next_question, sender: "ai" }]);
-    } catch { toast.error("Chat error"); }
-    finally { setChatLoading(false); }
+      setMessages((prev) => [
+        ...prev,
+        { text: res.data.feedback, sender: "ai" },
+        { text: res.data.next_question, sender: "ai" },
+      ]);
+    } catch {
+      toast.error("Chat error");
+    } finally {
+      setChatLoading(false);
+    }
   };
 
   const handleJDMatch = async () => {
     if (!file) return toast.error("Upload resume first");
     if (!jdText.trim()) return toast.error("Paste job description first");
-    if (jdText.length > 5000) return toast.error("Job description is too long! Max 5000 chars.");
-    
     const formData = new FormData();
     formData.append("file", file);
     formData.append("job_description", jdText);
@@ -242,10 +202,12 @@ export default function Dashboard() {
     try {
       const res = await api.post("/match-jd", formData);
       setJdResult(res.data.result);
-      toast.success("JD Match complete! 🎯");
+      toast.success("JD Match complete!");
     } catch (err) {
       toast.error(err.response?.data?.detail || "JD Match failed");
-    } finally { setJdLoading(false); }
+    } finally {
+      setJdLoading(false);
+    }
   };
 
   const handleCoverLetter = async () => {
@@ -259,301 +221,223 @@ export default function Dashboard() {
     try {
       const res = await api.post("/cover-letter", formData);
       setCoverLetter(res.data.cover_letter);
-      toast.success("Cover letter ready! 📝");
+      toast.success("Cover letter ready!");
     } catch (err) {
       toast.error(err.response?.data?.detail || "Cover letter failed");
-    } finally { setCoverLoading(false); }
+    } finally {
+      setCoverLoading(false);
+    }
   };
-
-  const fetchHistory = async () => {
-    setHistoryLoading(true);
-    try {
-      const res = await api.get("/history");
-      setHistory(res.data.history);
-    } catch { toast.error("Failed to load history"); }
-    finally { setHistoryLoading(false); }
-  };
-
-  const tabs = [
-    { id: "analyze", label: "Analyze", emoji: "🔍" },
-    { id: "rewrite", label: "Rewrite", emoji: "✨" },
-    { id: "interview", label: "Interview", emoji: "🎤" },
-    { id: "jd", label: "JD Match", emoji: "🎯" },
-    { id: "cover", label: "Cover Letter", emoji: "📝" },
-    { id: "history", label: "History", emoji: "📊" },
-  ];
 
   return (
-    <div style={{ minHeight: "100vh", background: "#080810", color: "#fff", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
-      <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: isMobile ? "12px 16px" : "14px 32px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(8,8,16,0.98)", backdropFilter: "blur(20px)", position: "sticky", top: 0, zIndex: 100 }}>
-        <div style={{ fontSize: 18, fontWeight: 900 }}>Resume<span style={{ color: "#F59E0B" }}>AI</span></div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ fontSize: 13, color: "#fff" }}>👋 {user?.name?.split(" ")[0]}</div>
-          <button onClick={handleLogout} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#aaa", padding: "7px 14px", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-            <LogOut size={13} /> Logout
+    <div style={{ minHeight: "100vh", background: "#0A0A0F", color: "#fff", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+      {/* Navbar */}
+      <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(10,10,15,0.98)" }}>
+        <div style={{ fontSize: 20, fontWeight: 700 }}>
+          Resume<span style={{ color: "#F59E0B" }}>AI</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div style={{ fontSize: 14, color: "#999" }}>{user?.name || "User"}</div>
+          <button onClick={handleLogout} style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.1)", color: "#666", padding: "7px 14px", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+            <LogOut size={14} />
+            Logout
           </button>
         </div>
       </nav>
 
-      <div style={{ maxWidth: 860, margin: "0 auto", padding: isMobile ? "20px 16px" : "28px 20px" }}>
-        <div style={{ display: "flex", gap: 4, marginBottom: 20, background: "rgba(255,255,255,0.03)", padding: 4, borderRadius: 12, overflowX: "auto", border: "1px solid rgba(255,255,255,0.06)" }}>
-          {tabs.map(({ id, label, emoji }) => (
-            <button key={id} onClick={() => { setActiveTab(id); if (id === "history") fetchHistory(); }}
-              style={{ padding: isMobile ? "8px 14px" : "9px 18px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: isMobile ? 12 : 13, fontWeight: 600, transition: "all 0.15s", whiteSpace: "nowrap", flex: "0 0 auto",
-                background: activeTab === id ? "linear-gradient(135deg, #F59E0B, #F97316)" : "transparent",
-                color: activeTab === id ? "#000" : "#888",
-                boxShadow: activeTab === id ? "0 2px 12px rgba(245,158,11,0.3)" : "none",
-              }}>
-              {emoji} {!isMobile && label}
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 20px" }}>
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: 4, marginBottom: 20, background: "#13131A", padding: 4, borderRadius: 10, width: "fit-content", overflowX: "auto", whiteSpace: "nowrap" }}>
+          {[
+            ["analyze", "Analyze"],
+            ["rewrite", "Rewrite ✨"],
+            ["interview", "Interview 🎤"],
+            ["jd", "JD Match 🎯"],
+            ["cover", "Cover Letter 📝"]
+          ].map(([tab, label]) => (
+            <button key={tab} onClick={() => setActiveTab(tab)} style={{ padding: "8px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 500, transition: "all 0.15s", background: activeTab === tab ? "#F59E0B" : "transparent", color: activeTab === tab ? "#000" : "#666" }}>
+              {label}
             </button>
           ))}
         </div>
 
-        <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 16, padding: isMobile ? 16 : 24, marginBottom: 20 }}>
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14, marginBottom: 16 }}>
+        {/* Upload Box */}
+        <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 24, marginBottom: 20 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
             <div>
-              <label style={{ fontSize: 12, color: "#888", display: "block", marginBottom: 8, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Target Job Role</label>
-              <input value={jobRole} onChange={e => setJobRole(e.target.value)}
-                placeholder="e.g. Software Engineer"
-                list="job-roles"
-                className="premium-input"
-                style={{ width: "100%", padding: "11px 14px", fontSize: 14, outline: "none", boxSizing: "border-box" }}
-              />
-              <datalist id="job-roles">
-                <option value="Software Engineer" />
-                <option value="Frontend Developer" />
-                <option value="Backend Developer" />
-                <option value="Full Stack Developer" />
-                <option value="Data Scientist" />
-                <option value="Data Analyst" />
-                <option value="Machine Learning Engineer" />
-                <option value="AI Engineer" />
-                <option value="DevOps Engineer" />
-              </datalist>
+              <label style={{ fontSize: 13, color: "#999", display: "block", marginBottom: 8 }}>Job Role</label>
+              <input value={jobRole} onChange={(e) => setJobRole(e.target.value)} placeholder="e.g. Software Engineer" style={{ width: "100%", padding: "10px 14px", borderRadius: 8, background: "#0A0A0F", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", fontSize: 14, outline: "none", boxSizing: "border-box" }} />
             </div>
             <div>
-              <label style={{ fontSize: 12, color: "#888", display: "block", marginBottom: 8, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Resume (PDF Only)</label>
-              <input type="file" accept=".pdf" onChange={e => setFile(e.target.files[0])}
-                className="premium-file-input premium-input"
-                style={{ width: "100%", padding: "10px 14px", boxSizing: "border-box" }}
-              />
+              <label style={{ fontSize: 13, color: "#999", display: "block", marginBottom: 8 }}>Resume (PDF)</label>
+              <input type="file" accept=".pdf" onChange={(e) => setFile(e.target.files[0])} style={{ width: "100%", padding: "9px 14px", borderRadius: 8, background: "#0A0A0F", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", fontSize: 13, boxSizing: "border-box" }} />
             </div>
           </div>
 
           {activeTab === "analyze" && (
-            <>
-              <button onClick={handleAnalyze} disabled={loading}
-                style={{ padding: "12px 28px", borderRadius: 10, border: "none", background: loading ? "#1a1a2a" : "linear-gradient(135deg, #F59E0B, #F97316)", color: loading ? "#444" : "#000", fontWeight: 800, cursor: loading ? "not-allowed" : "pointer", fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
-                <Zap size={16} /> {loading ? "AI Analyzing..." : "Analyze My Resume"}
-              </button>
-              {loading && (
-                <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10, background: "rgba(245,158,11,0.03)", border: "1px solid rgba(245,158,11,0.1)", padding: "12px 16px", borderRadius: 10 }}>
-                  <span style={{ color: "#F59E0B", fontSize: 13, fontWeight: 600 }}>
-                    {currentLoaderText}
-                  </span>
-                </div>
-              )}
-            </>
+            <button onClick={handleAnalyze} disabled={loading} style={{ padding: "11px 28px", borderRadius: 8, border: "none", background: loading ? "#333" : "#F59E0B", color: loading ? "#666" : "#000", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
+              <Zap size={16} />
+              {loading ? "Analyzing..." : "Analyze Resume"}
+            </button>
           )}
 
           {activeTab === "rewrite" && (
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <button onClick={handleRewrite} disabled={rewriteLoading}
-                style={{ padding: "12px 24px", borderRadius: 10, border: "none", background: rewriteLoading ? "#1a1a2a" : "linear-gradient(135deg, #F59E0B, #F97316)", color: rewriteLoading ? "#444" : "#000", fontWeight: 800, cursor: rewriteLoading ? "not-allowed" : "pointer", fontSize: 14 }}>
-                {rewriteLoading ? "AI Rewriting Layout..." : "✨ Complete AI Optimization"}
+            <div style={{ display: "flex", gap: 12 }}>
+              <button onClick={handleRewrite} disabled={rewriteLoading} style={{ padding: "11px 28px", borderRadius: 8, border: "none", background: rewriteLoading ? "#333" : "#F59E0B", color: rewriteLoading ? "#666" : "#000", fontWeight: 700, cursor: rewriteLoading ? "not-allowed" : "pointer", fontSize: 14 }}>
+                {rewriteLoading ? "Rewriting..." : "✨ Rewrite Resume"}
               </button>
               {rewritten && (
-                <button onClick={downloadPDF}
-                  style={{ padding: "12px 20px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "#ccc", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
-                  <Download size={14} /> Download PDF Layout
+                <button onClick={downloadPDF} style={{ padding: "11px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "#fff", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
+                  <Download size={15} />
+                  Download PDF
                 </button>
               )}
             </div>
           )}
 
           {activeTab === "interview" && !showChat && (
-            <button onClick={startInterview}
-              style={{ padding: "12px 28px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #F59E0B, #F97316)", color: "#000", fontWeight: 800, cursor: "pointer", fontSize: 14 }}>
-              🎤 Start AI Voice/Mock Interview
+            <button onClick={triggerInterviewDetails} style={{ padding: "11px 28px", borderRadius: 8, border: "none", background: "#F59E0B", color: "#000", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+              🎤 Start Mock Interview
             </button>
-          )}
-
-          {activeTab === "cover" && (
-            <div>
-              <input value={companyName} onChange={e => setCompanyName(e.target.value)}
-                placeholder="Company name (e.g. Google, TCS)"
-                style={{ width: "100%", padding: "11px 14px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", color: "#fff", fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 12 }}
-              />
-              <button onClick={handleCoverLetter} disabled={coverLoading}
-                style={{ padding: "12px 28px", borderRadius: 10, border: "none", background: coverLoading ? "#1a1a2a" : "linear-gradient(135deg, #F59E0B, #F97316)", color: coverLoading ? "#444" : "#000", fontWeight: 800, cursor: coverLoading ? "not-allowed" : "pointer", fontSize: 14 }}>
-                {coverLoading ? "Generating structure..." : "📝 Generate Tailored Cover Letter"}
-              </button>
-            </div>
           )}
         </div>
 
+        {/* Student Data Info Popup Modal */}
+        {showStudentPopup && (
+          <div style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
+            <div style={{ background: "#13131A", padding: 30, borderRadius: 16, border: "1px solid rgba(255,255,255,0.1)", width: "100%", maxWidth: 380 }}>
+              <h3 style={{ marginTop: 0, marginBottom: 6, fontSize: 18 }}>Student Metadata 📋</h3>
+              <p style={{ color: "#777", fontSize: 13, marginBottom: 20 }}>Fill details to initialize institutional metrics tracking.</p>
+              
+              <label style={{ display: "block", fontSize: 13, color: "#999", marginBottom: 6 }}>Age</label>
+              <input type="number" value={studentDetails.age} onChange={e => setStudentDetails({...studentDetails, age: e.target.value})} placeholder="e.g. 22" style={{ width: "100%", padding: "10px 14px", borderRadius: 8, background: "#0A0A0F", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", fontSize: 14, marginBottom: 16, outline: "none", boxSizing: "border-box" }} />
+              
+              <label style={{ display: "block", fontSize: 13, color: "#999", marginBottom: 6 }}>Academic Branch</label>
+              <input type="text" value={studentDetails.branch} onChange={e => setStudentDetails({...studentDetails, branch: e.target.value})} placeholder="e.g. CSE" style={{ width: "100%", padding: "10px 14px", borderRadius: 8, background: "#0A0A0F", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", fontSize: 14, marginBottom: 24, outline: "none", boxSizing: "border-box" }} />
+              
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                <button onClick={() => setShowStudentPopup(false)} style={{ background: "transparent", border: "1px solid #333", color: "#aaa", padding: "8px 16px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>Cancel</button>
+                <button onClick={startInterview} style={{ background: "#F59E0B", border: "none", color: "#000", padding: "8px 18px", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 13 }}>Begin 🚀</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Global Loading Spinner state display */}
+        {(loading || rewriteLoading || jdLoading || coverLoading) && (
+          <div style={{ padding: 20, background: "#13131A", borderRadius: 14, border: "1px solid rgba(245,158,11,0.2)", marginBottom: 20, display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 20, height: 20, border: "2px solid #F59E0B", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+            <span style={{ color: "#F59E0B", fontSize: 14, fontWeight: 600 }}>{loaderText}</span>
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          </div>
+        )}
+
+        {/* Analysis Result */}
         {activeTab === "analyze" && result && (
-          <div className="premium-card tab-content-active" style={{ padding: isMobile ? 16 : 24 }}>
-            <div style={{ marginBottom: 28 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <span style={{ color: "#aaa", fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Overall ATS Score</span>
-                <span style={{ fontWeight: 900, fontSize: 22, color: result.score >= 70 ? "#22c55e" : result.score >= 50 ? "#F59E0B" : "#ef4444" }}>{displayScore}<span style={{ fontSize: 14, color: "#444" }}>/100</span></span>
+          <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 24 }}>
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                <span style={{ color: "#999", fontSize: 14 }}>ATS Score</span>
+                <span style={{ fontWeight: 700, fontSize: 18, color: result.score >= 70 ? "#22c55e" : result.score >= 50 ? "#F59E0B" : "#ef4444" }}>{result.score}/100</span>
               </div>
-              <div style={{ height: 10, background: "rgba(255,255,255,0.05)", borderRadius: 99, overflow: "hidden" }}>
-                <div style={{ height: "100%", borderRadius: 99, width: `${result.score}%`, background: result.score >= 70 ? "linear-gradient(90deg, #16a34a, #22c55e)" : result.score >= 50 ? "linear-gradient(90deg, #d97706, #F59E0B)" : "linear-gradient(90deg, #dc2626, #ef4444)", transition: "width 1s ease" }} />
-              </div>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 20, marginBottom: 20 }}>
-              <div style={{ background: "rgba(34,197,94,0.02)", border: "1px solid rgba(34,197,94,0.1)", borderRadius: 12, padding: 16 }}>
-                <h3 style={{ color: "#22c55e", fontSize: 14, marginBottom: 14, fontWeight: 700 }}>✅ Identified Strengths</h3>
-                {result.strengths?.map((s, i) => (
-                  <div key={i} style={{ fontSize: 13, color: "#ccc", marginBottom: 10, display: "flex", gap: 8 }}>
-                    <CheckCircle size={13} color="#22c55e" style={{ flexShrink: 0, marginTop: 1 }} />{s}
-                  </div>
-                ))}
-              </div>
-              <div style={{ background: "rgba(245,158,11,0.02)", border: "1px solid rgba(245,158,11,0.1)", borderRadius: 12, padding: 16 }}>
-                <h3 style={{ color: "#F59E0B", fontSize: 14, marginBottom: 14, fontWeight: 700 }}>⚠️ Critical Improvements</h3>
-                {result.improvements?.map((s, i) => (
-                  <div key={i} style={{ fontSize: 13, color: "#ccc", marginBottom: 10, display: "flex", gap: 8 }}>
-                    <AlertCircle size={13} color="#F59E0B" style={{ flexShrink: 0, marginTop: 1 }} />{s}
-                  </div>
-                ))}
+              <div style={{ height: 8, background: "#1a1a2a", borderRadius: 99, overflow: "hidden" }}>
+                <div style={{ height: "100%", borderRadius: 99, width: `${result.score}%`, background: result.score >= 70 ? "#22c55e" : result.score >= 50 ? "#F59E0B" : "#ef4444", transition: "width 0.8s ease" }} />
               </div>
             </div>
-
-            {result.missing_keywords?.length > 0 && (
-              <div style={{ marginBottom: 20 }}>
-                <h3 style={{ fontSize: 14, marginBottom: 12, color: "#ef4444", fontWeight: 700 }}>❌ Missing Keywords (ATS Triggers)</h3>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {result.missing_keywords.map((k, i) => (
-                    <span key={i} style={{ padding: "5px 12px", borderRadius: 99, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.15)", fontSize: 12, color: "#ef4444" }}>{k}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {result.improved_bullets?.length > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
               <div>
-                <h3 style={{ fontSize: 14, marginBottom: 14, fontWeight: 700 }}>💡 Impact Metric Optimization</h3>
-                {result.improved_bullets.map((b, i) => (
-                  <div key={i} style={{ background: "rgba(255,255,255,0.01)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 10, padding: 14, marginBottom: 10 }}>
-                    <div style={{ fontSize: 12, color: "#666", marginBottom: 8 }}>Before: {b.original || b.before}</div>
-                    <div style={{ fontSize: 13, color: "#22c55e" }}>Optimized: {b.improved || b.after}</div>
+                <h3 style={{ color: "#22c55e", fontSize: 15, marginBottom: 12 }}>✅ Strengths</h3>
+                {result.strengths?.map((s, i) => (
+                  <div key={i} style={{ fontSize: 13, color: "#ccc", marginBottom: 8, display: "flex", gap: 8 }}>
+                    <CheckCircle size={14} color="#22c55e" style={{ flexShrink: 0, marginTop: 2 }} />
+                    {s}
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === "rewrite" && rewritten && (
-          <div className="premium-card tab-content-active" style={{ padding: isMobile ? 16 : 24 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <h3 style={{ fontWeight: 800 }}>✨ Recruiter-Ready Structure</h3>
-              <button onClick={downloadPDF} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "linear-gradient(135deg, #F59E0B, #F97316)", color: "#000", cursor: "pointer", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
-                <Download size={13} /> Download PDF
-              </button>
-            </div>
-            <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, color: "#ddd", lineHeight: 1.8, fontFamily: "inherit" }}>{rewritten}</pre>
-          </div>
-        )}
-
-        {activeTab === "interview" && showChat && (
-          <div className="premium-card tab-content-active" style={{ overflow: "hidden", padding: 0 }}>
-            <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ width: 8, height: 8, borderRadius: 99, background: interviewEnded ? "#ef4444" : "#22c55e" }} />
-                <span style={{ fontSize: 14, color: "#aaa", fontWeight: 600 }}>{interviewEnded ? "Session Wrapped" : "Interactive Mock Panel"}</span>
+              <div>
+                <h3 style={{ color: "#F59E0B", fontSize: 15, marginBottom: 12 }}>⚠️ Improvements</h3>
+                {result.improvements?.map((s, i) => (
+                  <div key={i} style={{ fontSize: 13, color: "#ccc", marginBottom: 8, display: "flex", gap: 8 }}>
+                    <AlertCircle size={14} color="#F59E0B" style={{ flexShrink: 0, marginTop: 2 }} />
+                    {s}
+                  </div>
+                ))}
               </div>
-              {interviewEnded && (
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <span style={{ background: "rgba(34,197,94,0.1)", color: "#22c55e", padding: "4px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700 }}>Score: {interviewScore}/100</span>
-                  <button onClick={handleInterviewRestart} style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(245,158,11,0.1)", color: "#F59E0B", border: "1px solid rgba(245,158,11,0.2)", padding: "4px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                    <RefreshCw size={12} /> Restart
-                  </button>
-                </div>
-              )}
             </div>
-            
-            <div style={{ height: 320, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+          </div>
+        )}
+
+        {/* Rewrite Result */}
+        {activeTab === "rewrite" && rewritten && (
+          <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 24 }}>
+            <h3 style={{ marginBottom: 16 }}>✨ Rewritten Resume</h3>
+            <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, color: "#ccc", lineHeight: 1.7, fontFamily: "inherit" }}>{rewritten}</pre>
+          </div>
+        )}
+
+        {/* Interview Chat Dashboard view */}
+        {activeTab === "interview" && showChat && (
+          <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, overflow: "hidden" }}>
+            <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 14, color: "#999" }}>🎤 Mock Interview Session</span>
+              <button onClick={handleExitAndReport} style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444", padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>End & Send Report 📩</button>
+            </div>
+            <div style={{ height: 340, overflowY: "auto", padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
               {messages.map((m, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: m.sender === "user" ? "flex-end" : "flex-start" }}>
-                  <div style={{ maxWidth: "85%", padding: "10px 14px", borderRadius: 12, fontSize: 14, lineHeight: 1.5, background: m.sender === "user" ? "linear-gradient(135deg, #F59E0B, #F97316)" : "rgba(255,255,255,0.04)", color: m.sender === "user" ? "#000" : "#ddd", border: m.sender === "ai" ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
-                    {m.text}
-                  </div>
+                  <div style={{ maxWidth: "75%", padding: "10px 14px", borderRadius: 10, fontSize: 14, lineHeight: 1.5, background: m.sender === "user" ? "#F59E0B" : "#1a1a2a", color: m.sender === "user" ? "#000" : "#ccc" }}>{m.text}</div>
                 </div>
               ))}
-              {chatLoading && <div style={{ color: "#F59E0B", fontSize: 13 }}>🤔 AI Panel evaluating...</div>}
-              {interviewEnded && (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: 20, background: "rgba(255,255,255,0.01)", border: "1px dashed rgba(255,255,255,0.08)", borderRadius: 12, marginTop: 10 }}>
-                  <p style={{ fontSize: 13, color: "#aaa", textAlign: "center", margin: 0 }}>The continuous evaluation pool metrics limit has been wrapped up. Ready to trigger another session loop?</p>
-                  <button onClick={handleInterviewRestart} style={{ display: "flex", alignItems: "center", gap: 6, background: "linear-gradient(135deg, #F59E0B, #F97316)", color: "#000", border: "none", padding: "8px 20px", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 14px rgba(245,158,11,0.2)" }}>
-                    <RefreshCw size={13} /> Start Fresh Mock Interview
-                  </button>
-                </div>
-              )}
+              {chatLoading && <div style={{ color: "#555", fontSize: 13 }}>AI is thinking...</div>}
             </div>
-
-            <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: 10 }}>
-              <input value={input} onChange={e => setInput(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && sendMessage()}
-                disabled={interviewEnded}
-                placeholder={interviewEnded ? "Session completed. Trigger 'Start Fresh Mock Interview' loop." : "Provide your answers clearly..."}
-                style={{ flex: 1, padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", color: "#fff", fontSize: 14, outline: "none" }}
-              />
-              <button onClick={sendMessage} disabled={chatLoading || interviewEnded}
-                style={{ padding: "10px 16px", borderRadius: 10, border: "none", background: interviewEnded ? "#333" : "linear-gradient(135deg, #F59E0B, #F97316)", color: "#000", cursor: "pointer", fontWeight: 700 }}>
-                <Send size={15} />
+            <div style={{ padding: "12px 20px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: 10 }}>
+              <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessage()} placeholder="Type your answer and press Enter..." style={{ flex: 1, padding: "10px 14px", borderRadius: 8, background: "#0A0A0F", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", fontSize: 14, outline: "none" }} />
+              <button onClick={sendMessage} disabled={chatLoading} style={{ padding: "10px 16px", borderRadius: 8, border: "none", background: "#F59E0B", color: "#000", cursor: "pointer" }}>
+                <Send size={16} />
               </button>
             </div>
           </div>
         )}
 
+        {/* JD Match UI */}
         {activeTab === "jd" && (
-          <div className="premium-card tab-content-active" style={{ padding: isMobile ? 16 : 24 }}>
-            <h3 style={{ fontWeight: 800, marginBottom: 4 }}>🎯 Job Description Alignment</h3>
-            <p style={{ fontSize: 13, color: "#666", marginBottom: 16 }}>Paste exact role requirements to evaluate compliance</p>
-            <textarea value={jdText} onChange={e => setJdText(e.target.value)}
-              placeholder="Paste the full job description metrics here..."
-              style={{ width: "100%", height: 140, padding: "12px 14px", borderRadius: 10, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", color: "#fff", fontSize: 13, outline: "none", resize: "vertical", boxSizing: "border-box", fontFamily: "inherit" }}
-            />
-            {/* Sleek Glowing Live Counter */}
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4, fontSize: 11, color: jdText.length > 4000 ? "#ef4444" : "#666" }}>
-              Characters: <span style={{ color: jdText.length > 0 ? "#F59E0B" : "#666", marginLeft: 4 }}>{jdText.length}</span> / 5000
-            </div>
-            <button onClick={handleJDMatch} disabled={jdLoading}
-              style={{ marginTop: 12, padding: "12px 28px", borderRadius: 10, border: "none", background: jdLoading ? "#1a1a2a" : "linear-gradient(135deg, #F59E0B, #F97316)", color: jdLoading ? "#444" : "#000", fontWeight: 800, cursor: jdLoading ? "not-allowed" : "pointer", fontSize: 14 }}>
-              {jdLoading ? "Mapping Keywords..." : "Calculate Match Metrics"}
+          <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 24 }}>
+            <h3 style={{ marginBottom: 16 }}>🎯 Job Description Match</h3>
+            <textarea value={jdText} onChange={(e) => setJdText(e.target.value)} placeholder="Paste the job description here..." style={{ width: "100%", height: 150, padding: "12px 14px", borderRadius: 8, background: "#0A0A0F", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", fontSize: 13, outline: "none", resize: "vertical", boxSizing: "border-box" }} />
+            <button onClick={handleJDMatch} disabled={jdLoading} style={{ marginTop: 12, padding: "11px 28px", borderRadius: 8, border: "none", background: jdLoading ? "#333" : "#F59E0B", color: jdLoading ? "#666" : "#000", fontWeight: 700, cursor: jdLoading ? "not-allowed" : "pointer", fontSize: 14 }}>
+              {jdLoading ? "Matching..." : "🎯 Match Resume to JD"}
             </button>
 
             {jdResult && (
               <div style={{ marginTop: 24 }}>
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontWight: 600, alignItems: "center", marginBottom: 10 }}>
-                    <span style={{ fontSize: 13, color: "#aaa" }}>Sync Ratio</span>
-                    <span style={{ fontWeight: 900, fontSize: 22, color: jdResult.match_score >= 70 ? "#22c55e" : "#F59E0B" }}>{jdResult.match_score}%</span>
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                    <span style={{ color: "#999", fontSize: 14 }}>Match Score</span>
+                    <span style={{ fontWeight: 700, fontSize: 18, color: jdResult.match_score >= 70 ? "#22c55e" : jdResult.match_score >= 50 ? "#F59E0B" : "#ef4444" }}>{jdResult.match_score}%</span>
                   </div>
-                  <div style={{ height: 10, background: "rgba(255,255,255,0.05)", borderRadius: 99, overflow: "hidden" }}>
-                    <div style={{ height: "100%", borderRadius: 99, width: `${jdResult.match_score}%`, background: "linear-gradient(90deg, #d97706, #F59E0B)", transition: "width 1s ease" }} />
+                  <div style={{ height: 8, background: "#1a1a2a", borderRadius: 99, overflow: "hidden" }}>
+                    <div style={{ height: "100%", borderRadius: 99, width: `${jdResult.match_score}%`, background: jdResult.match_score >= 70 ? "#22c55e" : jdResult.match_score >= 50 ? "#F59E0B" : "#ef4444", transition: "width 0.8s ease" }} />
                   </div>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 16, marginBottom: 16 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
                   <div>
-                    <h4 style={{ color: "#22c55e", marginBottom: 10, fontSize: 13 }}>✅ Parsed Keywords</h4>
+                    <h4 style={{ color: "#22c55e", marginBottom: 8 }}>✅ Matched Keywords</h4>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {jdResult.matched_keywords?.map((k, i) => <span key={i} style={{ padding: "4px 10px", borderRadius: 99, background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.15)", fontSize: 12, color: "#22c55e" }}>{k}</span>)}
+                      {jdResult.matched_keywords?.map((k, i) => (
+                        <span key={i} style={{ padding: "3px 10px", borderRadius: 99, background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)", fontSize: 12, color: "#22c55e" }}>{k}</span>
+                      ))}
                     </div>
                   </div>
                   <div>
-                    <h4 style={{ color: "#ef4444", marginBottom: 10, fontSize: 13 }}>❌ Absent Keywords</h4>
+                    <h4 style={{ color: "#ef4444", marginBottom: 8 }}>❌ Missing Keywords</h4>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {jdResult.missing_keywords?.map((k, i) => <span key={i} style={{ padding: "4px 10px", borderRadius: 99, background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.15)", fontSize: 12, color: "#ef4444" }}>{k}</span>)}
+                      {jdResult.missing_keywords?.map((k, i) => (
+                        <span key={i} style={{ padding: "3px 10px", borderRadius: 99, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", fontSize: 12, color: "#ef4444" }}>{k}</span>
+                      ))}
                     </div>
                   </div>
                 </div>
-                <div style={{ padding: 14, background: "rgba(245,158,11,0.04)", border: "1px solid rgba(245,158,11,0.12)", borderRadius: 10, fontSize: 13, color: "#bbb" }}>
+                <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 10, padding: 14, fontSize: 13, color: "#ccc" }}>
                   💡 {jdResult.recommendation}
                 </div>
               </div>
@@ -561,70 +445,23 @@ export default function Dashboard() {
           </div>
         )}
 
-        {activeTab === "cover" && coverLetter && (
-          <div className="premium-card tab-content-active" style={{ padding: isMobile ? 16 : 24 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <h3 style={{ fontWeight: 800 }}>📝 Dynamic Pitch Structure</h3>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => { navigator.clipboard.writeText(coverLetter); toast.success("Copied to Clipboard!"); }}
-                  style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "#aaa", cursor: "pointer", fontSize: 13 }}>
-                  📋 Copy
-                </button>
-                <button onClick={() => {
-                  const doc = new jsPDF();
-                  const lines = doc.splitTextToSize(coverLetter, 175);
-                  doc.setFont("Helvetica", "normal");
-                  doc.setFontSize(11);
-                  let y = 20;
-                  lines.forEach(line => {
-                    if (y > 275) { doc.addPage(); y = 20; }
-                    doc.text(line, 15, y);
-                    y += 6;
-                  });
-                  doc.save("CoverLetter-ResumeAI.pdf");
-                  toast.success("Cover Letter PDF downloaded!");
-                }}
-                  style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: "linear-gradient(135deg, #F59E0B, #F97316)", color: "#000", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
-                  📄 PDF
-                </button>
-              </div>
-            </div>
-            <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, color: "#ccc", lineHeight: 1.9, fontFamily: "inherit" }}>{coverLetter}</pre>
-          </div>
-        )}
+        {/* Cover Letter UI */}
+        {activeTab === "cover" && (
+          <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 24 }}>
+            <h3 style={{ marginBottom: 16 }}>📝 Cover Letter Generator</h3>
+            <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Company name (e.g. Google, Flipkart)" style={{ width: "100%", padding: "10px 14px", borderRadius: 8, background: "#0A0A0F", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 12 }} />
+            <button onClick={handleCoverLetter} disabled={coverLoading} style={{ padding: "11px 28px", borderRadius: 8, border: "none", background: coverLoading ? "#333" : "#F59E0B", color: coverLoading ? "#666" : "#000", fontWeight: 700, cursor: coverLoading ? "not-allowed" : "pointer", fontSize: 14 }}>
+              {coverLoading ? "Generating..." : "📝 Generate Cover Letter"}
+            </button>
 
-        {activeTab === "history" && (
-          <div className="premium-card tab-content-active" style={{ padding: isMobile ? 16 : 24 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <h3 style={{ fontWeight: 800 }}>📊 Previous Evaluations</h3>
-              <button onClick={fetchHistory} disabled={historyLoading}
-                style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "linear-gradient(135deg, #F59E0B, #F97316)", color: "#000", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>
-                {historyLoading ? "Reading logs..." : "🔄 Refresh"}
-              </button>
-            </div>
-            {history.length === 0 ? (
-              <div style={{ textAlign: "center", padding: 40, color: "#444" }}>
-                <div style={{ fontSize: 40, marginBottom: 12 }}>📄</div>
-                <p>No logged executions found.</p>
-                <button onClick={fetchHistory} style={{ marginTop: 16, padding: "10px 20px", borderRadius: 8, border: "none", background: "linear-gradient(135deg, #F59E0B, #F97316)", color: "#000", fontWeight: 700, cursor: "pointer" }}>
-                  Load Sync History
-                </button>
-              </div>
-            ) : (
-              history.map((h) => (
-                <div key={h.id} style={{ background: "rgba(255,255,255,0.01)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                    <div>
-                      <span style={{ fontWeight: 700, fontSize: 15, color: "#fff" }}>{h.job_role}</span>
-                      <span style={{ marginLeft: 10, fontSize: 12, color: "#555" }}>{new Date(h.created_at).toLocaleDateString()}</span>
-                    </div>
-                    <span style={{ fontWeight: 900, fontSize: 18, color: h.score >= 70 ? "#22c55e" : h.score >= 50 ? "#F59E0B" : "#ef4444" }}>{h.score}/100</span>
-                  </div>
-                  <div style={{ height: 6, background: "rgba(255,255,255,0.05)", borderRadius: 99, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${h.score}%`, background: h.score >= 70 ? "#22c55e" : "#F59E0B", borderRadius: 99 }} />
-                  </div>
+            {coverLetter && (
+              <div style={{ marginTop: 20 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <h4>Your Cover Letter</h4>
+                  <button onClick={() => { navigator.clipboard.writeText(coverLetter); toast.success("Copied!"); }} style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "#fff", cursor: "pointer", fontSize: 12 }}>📋 Copy</button>
                 </div>
-              ))
+                <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, color: "#ccc", lineHeight: 1.8, fontFamily: "inherit" }}>{coverLetter}</pre>
+              </div>
             )}
           </div>
         )}

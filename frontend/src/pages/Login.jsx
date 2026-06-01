@@ -2,12 +2,14 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
+import { GoogleLogin } from '@react-oauth/google';
+import axios from "axios"; // Agar axios use kar rahe ho backend hit karne ke liye
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login } = useAuth(); // Agar aapke context mein koi special googleLogin function hai toh wo bhi add kar sakte hain
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -21,6 +23,31 @@ export default function Login() {
     } catch (err) {
       toast.error(err.response?.data?.detail || "Invalid email or password");
     } finally { setLoading(false); }
+  };
+
+  // Google Login Success Handler
+  const handleGoogleSuccess = async (credentialResponse) => {
+    setLoading(true);
+    try {
+      const token = credentialResponse.credential;
+      
+      // Deepanshu, yahan hum tumhare FastAPI backend ko hit karenge
+      // Abhi ke liye main '/api/auth/google' likh raha hoon, tum apne actual route se badal lena
+    const res = await axios.post("https://resumeai-backend-nv09.onrender.com/auth/google", {
+      token: token
+      });
+
+      if (res.data) {
+        toast.success("Google Login Successful! 🚀");
+        // Yahan agar auth context mein token save karna ho toh wo logic aayega
+        navigate("/dashboard");
+      }
+    } catch (err) {
+      console.error("Google Auth Error:", err);
+      toast.error("Google login failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -60,6 +87,26 @@ export default function Login() {
             {loading ? "Logging in..." : "Login to Dashboard →"}
           </button>
         </form>
+
+        {/* --- OR Divider --- */}
+        <div style={{ display: "flex", alignItems: "center", margin: "24px 0", color: "#444", fontSize: 12, fontWeight: 600 }}>
+          <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.08)" }} />
+          <span style={{ padding: "0 10px", textTransform: "uppercase", letterSpacing: "1px" }}>OR</span>
+          <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.08)" }} />
+        </div>
+
+        {/* --- Google Login Button --- */}
+        <div style={{ display: "flex", justifyContent: "center", width: "100%" }}>
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={() => {
+              toast.error("Google Sign-In Failed");
+            }}
+            theme="filled_dark"
+            shape="rectangular"
+            width="340px"
+          />
+        </div>
 
         <div style={{ textAlign: "center", marginTop: 24, fontSize: 14, color: "#444" }}>
           No account?{" "}

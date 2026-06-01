@@ -16,19 +16,24 @@ from email.mime.multipart import MIMEMultipart
 from groq import Groq
 from dotenv import load_dotenv
 
+# --- GOOGLE AUTH PACKAGES ---
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+
 load_dotenv()
 
 app = FastAPI()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-# GMAIL CONFIGURATION FOR OTP SYSTEM
+# GMAIL CONFIGURATION FOR OTP SYSTEM AND REPORTING
 GMAIL_USER = "deepanshumaheshwari907@gmail.com"  
 GMAIL_PASS = "aksw xoxw bpxe rdbh"   
+GOOGLE_CLIENT_ID = "31578202480-r2c7fsfcmh6or9ec566qvt2v35e882ma.apps.googleusercontent.com"
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=["http://localhost:3000", "https://ai-resume-assistant-cyan.vercel.app"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -79,6 +84,16 @@ class OTPVerifyRequest(BaseModel):
 class ChatRequest(BaseModel):
     answer: str
     history: str
+    
+class GoogleLoginRequest(BaseModel):
+    token: str
+
+class InterviewReportRequest(BaseModel):
+    name: str
+    email: str
+    age: int
+    branch: str
+    chat_history: str
 
 @app.get("/")
 def health_check():
@@ -237,7 +252,7 @@ async def upload_resume(
     }}
     """
     response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
+        model="llama3-8b-8192",
         messages=[{"role": "user", "content": prompt}]
     )
 
@@ -283,7 +298,7 @@ async def rewrite_resume(
     Return ONLY the formatted resume text.
     """
     response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
+        model="llama3-8b-8192",
         messages=[{"role": "user", "content": prompt}]
     )
     return {"rewritten_resume": response.choices[0].message.content}
@@ -297,7 +312,6 @@ async def chat(data: ChatRequest, current_user: User = Depends(get_current_user)
         user_answer = data.answer.strip()
         chat_history = data.history.strip()
 
-        # Instant Activation Trigger Bypass (No LLM Call to save token bounds)
         if user_answer.lower() == "start interview":
             return {
                 "feedback": "Welcome to your interactive AI simulation session.",
@@ -316,21 +330,19 @@ async def chat(data: ChatRequest, current_user: User = Depends(get_current_user)
         """
         
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="llama3-8b-8192",
             messages=[{"role": "user", "content": prompt}]
         )
 
         content = response.choices[0].message.content
         feedback, next_q = "", ""
 
-        # Fail-safe Parsing Loop
         for line in content.split("\n"):
             if line.upper().startswith("FEEDBACK:"):
-                feedback = line[style_offset:=len("FEEDBACK:")].strip()
+                feedback = line[len("FEEDBACK:"):].strip()
             elif line.upper().startswith("NEXT QUESTION:"):
-                next_q = line[style_offset:=len("NEXT QUESTION:")].strip()
+                next_q = line[len("NEXT QUESTION:"):].strip()
 
-        # Ultra Fallback: If Llama ignores format, populate string directly to keep frontend active
         if not next_q:
             if "FEEDBACK:" in content and "NEXT QUESTION:" in content:
                 parts = content.split("NEXT QUESTION:")
@@ -402,7 +414,7 @@ async def generate_cover_letter(
     Resume payload parameters: {resume_text}
     """
     response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
+        model="llama3-8b-8192",
         messages=[{"role": "user", "content": prompt}]
     )
     return {"cover_letter": response.choices[0].message.content}
@@ -425,3 +437,96 @@ async def get_history(
             "result": json.loads(a.result)
         } for a in analyses
     ]}
+
+# =====================================================================
+# AUTOMATED INTERVIEW REPORT EMAIL ENDPOINT (COLLEGE REQUIREMENT)
+# =====================================================================
+@app.post("/send-interview-report")
+async def send_interview_report(data: InterviewReportRequest):
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"📋 Placement Assessment Report: {data.name} ({data.branch})"
+        msg["From"] = GMAIL_USER
+        msg["To"] = GMAIL_USER 
+
+        html = f"""
+        <div style="font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; background-color: #0d0d13; color: #ffffff; border-radius: 16px; max-width: 600px; margin: auto; border: 1px solid rgba(255,255,255,0.05);">
+            <h2 style="color: #F59E0B; border-bottom: 2px solid #F59E0B; padding-bottom: 10px; margin-top: 0; font-weight: 800;">ResumeAI Institutional Report</h2>
+            <p style="color: #888; font-size: 14px;">The student has exited the AI Mock Interview simulation dashboard framework. Detailed metrics breakdown captured below:</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px;">
+                <tr style="background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 12px; font-weight: bold; color: #F59E0B; width: 35%;">Student Name:</td>
+                    <td style="padding: 12px; color: #fff;">{{data.name}}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 12px; font-weight: bold; color: #F59E0B;">Email Identity:</td>
+                    <td style="padding: 12px; color: #fff;">{{data.email}}</td>
+                </tr>
+                <tr style="background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 12px; font-weight: bold; color: #F59E0B;">Age Matrix:</td>
+                    <td style="padding: 12px; color: #fff;">{{data.age}} Years</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 12px; font-weight: bold; color: #F59E0B;">Academic Branch:</td>
+                    <td style="padding: 12px; color: #fff; text-transform: uppercase; letter-spacing: 1px;">{{data.branch}}</td>
+                </tr>
+            </table>
+            <h3 style="color: #fff; margin-top: 30px; margin-bottom: 12px; font-size: 15px; border-left: 3px solid #F59E0B; padding-left: 8px;">Full Session Interaction History Logs:</h3>
+            <div style="background: #050508; border: 1px solid rgba(255,255,255,0.05); padding: 16px; border-radius: 10px; font-family: monospace; font-size: 12px; line-height: 1.6; color: #ccc; max-height: 400px; overflow-y: auto; white-space: pre-wrap;">
+{{data.chat_history}}
+            </div>
+            <p style="color: #444; font-size: 11px; margin-top: 30px; text-align: center;">Automated cloud placement pipeline dashboard telemetry data stream.</p>
+        </div>
+        """
+        msg.attach(MIMEText(html, "html"))
+        
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(GMAIL_USER, GMAIL_PASS)
+            server.sendmail(GMAIL_USER, GMAIL_USER, msg.as_string())
+        
+        return {"status": "success", "message": "Institutional placement assessment data metrics dispatched."}
+    except Exception as e:
+        print(f"Report Mail Critical Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal mail delivery systems timed out.")
+
+# =====================================================================
+# GOOGLE OAUTH BACKEND SIGN-IN FLOW
+# =====================================================================
+@app.post("/auth/google")
+def google_login(data: GoogleLoginRequest, db: Session = Depends(get_db)):
+    try:
+        idinfo = id_token.verify_oauth2_token(data.token, google_requests.Request(), GOOGLE_CLIENT_ID)
+        user_email = idinfo['email']
+        user_name = idinfo.get('name', 'Google User')
+        
+        user = db.query(User).filter(User.email == user_email).first()
+        
+        if not user:
+            user = User(
+                name=user_name,
+                email=user_email,
+                hashed_password=hash_password("google_authenticated_secure_bypass_" + str(random.randint(1000, 9999))),
+                plan="free",
+                usage_count=0,
+                analysis_limit=2
+            )
+            user.is_verified = True
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        
+        token = create_token({"user_id": user.id})
+        return {
+            "token": token,
+            "user": {
+                "id": user.id,
+                "name": user.name,
+                "email": user.email,
+                "plan": user.plan,
+                "usage_count": user.usage_count,
+                "analysis_limit": user.analysis_limit,
+            }
+        }
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid Google OAuth token registration verification parameters.")

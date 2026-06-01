@@ -10,3 +10,4 @@ groq
 python-dotenv
 pydantic
 psycopg2-binary==2.9.9
+requests
