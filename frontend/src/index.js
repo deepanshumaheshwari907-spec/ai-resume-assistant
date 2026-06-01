@@ -20,8 +20,10 @@ root.render(
 // or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
 reportWebVitals();
 
+// frontend/src/index.js ke sabse niche yehi check hona chahiye
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    // Path ko solid static route karo
     navigator.serviceWorker.register('/service-worker.js');
   });
 }
