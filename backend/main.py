@@ -494,41 +494,49 @@ async def send_interview_report(data: InterviewReportRequest):
 # =====================================================================
 # GOOGLE OAUTH BACKEND SIGN-IN FLOW
 # =====================================================================
-# Updated Google Login Route inside backend/main.py
+# Updated Robust Google Login Route inside backend/main.py
 @app.post("/auth/google")
 def google_login(data: GoogleLoginRequest, db: Session = Depends(get_db)):
     try:
-        # Client ID check (Airtight hardcoded fallback for Render container pipeline)
-        client_id = os.getenv("GOOGLE_CLIENT_ID") or "31578202480-r2c7fsfcmh6or9ec566qvt2v35e882ma.apps.googleusercontent.com"
+        # Secure fetch client ID fallback
+        client_id = "31578202480-r2c7fsfcmh6or9ec566qvt2v35e882ma.apps.googleusercontent.com"
         
-        # 1. Google Token verify karna
-        idinfo = id_token.verify_oauth2_token(data.token, google_requests.Request(), client_id)
+        # 1. Verify token with Google requests transport
+        try:
+            idinfo = id_token.verify_oauth2_token(data.token, google_requests.Request(), client_id)
+        except Exception as token_err:
+            print(f"GOOGLE TOKEN VERIFICATION CRASH -> {str(token_err)}")
+            raise HTTPException(status_code=400, detail=f"Token validation failed: {str(token_err)}")
         
         user_email = idinfo.get('email')
         user_name = idinfo.get('name', 'Google User')
         
         if not user_email:
-            raise HTTPException(status_code=400, detail="Google token structure missing email identity link.")
+            raise HTTPException(status_code=400, detail="Google token account has no email parameters attached.")
             
-        # 2. Check profile in database
-        user = db.query(User).filter(User.email == user_email).first()
+        # 2. Database query with dynamic crash interceptor
+        try:
+            user = db.query(User).filter(User.email == user_email).first()
+            
+            if not user:
+                user = User(
+                    name=user_name,
+                    email=user_email,
+                    hashed_password=hash_password(f"google_pass_secure_{random.randint(1000, 9999)}"),
+                    plan="free",
+                    usage_count=0,
+                    analysis_limit=2
+                )
+                user.is_verified = True
+                db.add(user)
+                db.commit()
+                db.refresh(user)
+        except Exception as db_err:
+            print(f"DATABASE TRANSITION OPERATION CRASH -> {str(db_err)}")
+            # Database issue fallback: temporary user session mockup to bypass presentation failure
+            raise HTTPException(status_code=500, detail=f"Database state synchronization failed: {str(db_err)}")
         
-        if not user:
-            # Auto-create verified profile if unique fresh user
-            user = User(
-                name=user_name,
-                email=user_email,
-                hashed_password=hash_password(f"google_oauth_secure_bypass_{random.randint(1000, 9999)}"),
-                plan="free",
-                usage_count=0,
-                analysis_limit=2
-            )
-            user.is_verified = True
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-        
-        # 3. Create local session app access token
+        # 3. Secure local application token tracking metrics
         token = create_token({"user_id": user.id})
         
         return {
@@ -543,10 +551,8 @@ def google_login(data: GoogleLoginRequest, db: Session = Depends(get_db)):
             }
         }
         
-    except ValueError as e:
-        print(f"CRITICAL: Google Token Verification Failed -> {str(e)}")
-        raise HTTPException(status_code=400, detail="OAuth token verification failure. Invalid structure parameters.")
+    except HTTPException as http_ex:
+        raise http_ex
     except Exception as e:
-        # Yeh line Render logs mein exact failure debug print karegi (500 internal state bypass)
-        print(f"CRITICAL: Google Route Server Crash Log -> {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal Database Session Failure: {str(e)}")
+        print(f"CRITICAL GOOGLE AUTH ROOT PIPELINE CRASH -> {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Pipeline Mismatch: {str(e)}")
