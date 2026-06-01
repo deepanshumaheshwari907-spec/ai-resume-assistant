@@ -30,10 +30,11 @@ GMAIL_USER = "deepanshumaheshwari907@gmail.com"
 GMAIL_PASS = "aksw xoxw bpxe rdbh"   
 GOOGLE_CLIENT_ID = "31578202480-r2c7fsfcmh6or9ec566qvt2v35e882ma.apps.googleusercontent.com"
 
+# Copy and replace this exact middleware block inside backend/main.py
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://ai-resume-assistant-cyan.vercel.app"],
-    allow_credentials=True,
+    allow_origins=["*"],  # Dynamic origins request pass karne ke liye production level wildcard rule
+    allow_credentials=False, # Wildcard origins (*) ke sath credentials hamesha False hona chahiye, warna server crash hota hai
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -493,20 +494,31 @@ async def send_interview_report(data: InterviewReportRequest):
 # =====================================================================
 # GOOGLE OAUTH BACKEND SIGN-IN FLOW
 # =====================================================================
+# Updated Google Login Route inside backend/main.py
 @app.post("/auth/google")
 def google_login(data: GoogleLoginRequest, db: Session = Depends(get_db)):
     try:
-        idinfo = id_token.verify_oauth2_token(data.token, google_requests.Request(), GOOGLE_CLIENT_ID)
-        user_email = idinfo['email']
+        # Client ID check (Airtight hardcoded fallback for Render container pipeline)
+        client_id = os.getenv("GOOGLE_CLIENT_ID") or "31578202480-r2c7fsfcmh6or9ec566qvt2v35e882ma.apps.googleusercontent.com"
+        
+        # 1. Google Token verify karna
+        idinfo = id_token.verify_oauth2_token(data.token, google_requests.Request(), client_id)
+        
+        user_email = idinfo.get('email')
         user_name = idinfo.get('name', 'Google User')
         
+        if not user_email:
+            raise HTTPException(status_code=400, detail="Google token structure missing email identity link.")
+            
+        # 2. Check profile in database
         user = db.query(User).filter(User.email == user_email).first()
         
         if not user:
+            # Auto-create verified profile if unique fresh user
             user = User(
                 name=user_name,
                 email=user_email,
-                hashed_password=hash_password("google_authenticated_secure_bypass_" + str(random.randint(1000, 9999))),
+                hashed_password=hash_password(f"google_oauth_secure_bypass_{random.randint(1000, 9999)}"),
                 plan="free",
                 usage_count=0,
                 analysis_limit=2
@@ -516,7 +528,9 @@ def google_login(data: GoogleLoginRequest, db: Session = Depends(get_db)):
             db.commit()
             db.refresh(user)
         
+        # 3. Create local session app access token
         token = create_token({"user_id": user.id})
+        
         return {
             "token": token,
             "user": {
@@ -528,5 +542,11 @@ def google_login(data: GoogleLoginRequest, db: Session = Depends(get_db)):
                 "analysis_limit": user.analysis_limit,
             }
         }
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid Google OAuth token registration verification parameters.")
+        
+    except ValueError as e:
+        print(f"CRITICAL: Google Token Verification Failed -> {str(e)}")
+        raise HTTPException(status_code=400, detail="OAuth token verification failure. Invalid structure parameters.")
+    except Exception as e:
+        # Yeh line Render logs mein exact failure debug print karegi (500 internal state bypass)
+        print(f"CRITICAL: Google Route Server Crash Log -> {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal Database Session Failure: {str(e)}")
