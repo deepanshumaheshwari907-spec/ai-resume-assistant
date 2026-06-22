@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import api from "../utils/api";
 import toast from "react-hot-toast";
 import jsPDF from "jspdf";
-import { LogOut, Zap, Download, CheckCircle, AlertCircle, Send } from "lucide-react";
+import { LogOut, Zap, Download, CheckCircle, AlertCircle, Send, History, FileText } from "lucide-react";
 
 export default function Dashboard() {
   const { user, logout, refreshUser } = useAuth();
@@ -21,7 +21,7 @@ export default function Dashboard() {
   const [input, setInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
 
-  // Additional states for new features
+  // New Addons System States
   const [jdText, setJdText] = useState("");
   const [jdResult, setJdResult] = useState(null);
   const [jdLoading, setJdLoading] = useState(false);
@@ -29,29 +29,51 @@ export default function Dashboard() {
   const [coverLetter, setCoverLetter] = useState(null);
   const [coverLoading, setCoverLoading] = useState(false);
 
-  // States for Student Metadata for Interview Report
+  // Resume History State Tracking
+  const [historyData, setHistoryData] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Student Metadata for Interview Tracking Pipeline
   const [showStudentPopup, setShowStudentPopup] = useState(false);
   const [studentDetails, setStudentDetails] = useState({ age: "", branch: "" });
 
   const loaderTexts = [
     "Reading your resume...",
-    "Analyzing skills...",
-    "Matching with job description...",
-    "Generating ATS score..."
+    "Analyzing core skills...",
+    "Matching with job metrics...",
+    "Generating ATS compliance score..."
   ];
 
   const [loaderText, setLoaderText] = useState(loaderTexts[0]);
 
   useEffect(() => {
-    if (!loading && !rewriteLoading && !jdLoading && !coverLoading) return;
+    if (!loading && !rewriteLoading && !jdLoading && !coverLoading && !historyLoading) return;
     let i = 0;
     const interval = setInterval(() => {
       i = (i + 1) % loaderTexts.length;
       setLoaderText(loaderTexts[i]);
     }, 3000);
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, rewriteLoading, jdLoading, coverLoading]);
+  }, [loading, rewriteLoading, jdLoading, coverLoading, historyLoading]);
+
+  // Fetch History automatically when history tab is activated
+  useEffect(() => {
+    if (activeTab === "history") {
+      fetchHistory();
+    }
+  }, [activeTab]);
+
+  const fetchHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const res = await api.get("/history");
+      setHistoryData(res.data.history || []);
+    } catch (err) {
+      console.error("Failed to fetch history tracing registry:", err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -69,7 +91,7 @@ export default function Dashboard() {
       setResult(res.data.result);
       setRewritten(null);
       await refreshUser();
-      toast.success("Analysis complete!");
+      toast.success("Analysis complete! 🎉");
     } catch (err) {
       toast.error(err.response?.data?.detail || "Analysis failed. Try again.");
     } finally {
@@ -84,9 +106,10 @@ export default function Dashboard() {
     formData.append("job_role", jobRole || "Software Engineer");
     setRewriteLoading(true);
     try {
+      // FIXED: Strictly route via Axios API wrapper instead of local fallback strings
       const res = await api.post("/rewrite", formData);
       setRewritten(res.data.rewritten_resume);
-      toast.success("Resume rewritten!");
+      toast.success("Resume rewritten with structure formatting!");
     } catch (err) {
       toast.error(err.response?.data?.detail || "Rewrite failed");
     } finally {
@@ -119,10 +142,9 @@ export default function Dashboard() {
       }
     });
     doc.save("resume-rewritten.pdf");
-    toast.success("PDF downloaded!");
+    toast.success("Recruiter PDF downloaded!");
   };
 
-  // Step 1: Open student metadata collection popup before starting the interview
   const triggerInterviewDetails = () => {
     setShowStudentPopup(true);
   };
@@ -144,7 +166,6 @@ export default function Dashboard() {
     }
   };
 
-  // Step 2: Exit interview and automatically send report to your Gmail backend API
   const handleExitAndReport = async () => {
     try {
       toast.loading("Saving and generating report...");
@@ -153,7 +174,7 @@ export default function Dashboard() {
       await api.post("/send-interview-report", {
         name: user?.name || "Student",
         email: user?.email || "N/A",
-        age: studentDetails.age,
+        age: parseInt(studentDetails.age),
         branch: studentDetails.branch,
         chat_history: historySummary
       });
@@ -164,7 +185,7 @@ export default function Dashboard() {
       setMessages([]);
     } catch {
       toast.dismiss();
-      toast.error("Failed to send report, closing session.");
+      toast.error("Failed to send report safely.");
       setShowChat(false);
     }
   };
@@ -186,7 +207,7 @@ export default function Dashboard() {
         { text: res.data.next_question, sender: "ai" },
       ]);
     } catch {
-      toast.error("Chat error");
+      toast.error("Chat conversation engine timeout error");
     } finally {
       setChatLoading(false);
     }
@@ -202,7 +223,7 @@ export default function Dashboard() {
     try {
       const res = await api.post("/match-jd", formData);
       setJdResult(res.data.result);
-      toast.success("JD Match complete!");
+      toast.success("JD Match profiling complete!");
     } catch (err) {
       toast.error(err.response?.data?.detail || "JD Match failed");
     } finally {
@@ -221,9 +242,9 @@ export default function Dashboard() {
     try {
       const res = await api.post("/cover-letter", formData);
       setCoverLetter(res.data.cover_letter);
-      toast.success("Cover letter ready!");
+      toast.success("Cover letter pipeline ready!");
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Cover letter failed");
+      toast.error(err.response?.data?.detail || "Cover letter execution failed");
     } finally {
       setCoverLoading(false);
     }
@@ -246,14 +267,15 @@ export default function Dashboard() {
       </nav>
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 20px" }}>
-        {/* Tabs */}
+        {/* Tabs Grid System */}
         <div style={{ display: "flex", gap: 4, marginBottom: 20, background: "#13131A", padding: 4, borderRadius: 10, width: "fit-content", overflowX: "auto", whiteSpace: "nowrap" }}>
           {[
             ["analyze", "Analyze"],
             ["rewrite", "Rewrite ✨"],
             ["interview", "Interview 🎤"],
             ["jd", "JD Match 🎯"],
-            ["cover", "Cover Letter 📝"]
+            ["cover", "Cover Letter 📝"],
+            ["history", "History 📋"]
           ].map(([tab, label]) => (
             <button key={tab} onClick={() => setActiveTab(tab)} style={{ padding: "8px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 500, transition: "all 0.15s", background: activeTab === tab ? "#F59E0B" : "transparent", color: activeTab === tab ? "#000" : "#666" }}>
               {label}
@@ -261,48 +283,50 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* Upload Box */}
-        <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 24, marginBottom: 20 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
-            <div>
-              <label style={{ fontSize: 13, color: "#999", display: "block", marginBottom: 8 }}>Job Role</label>
-              <input value={jobRole} onChange={(e) => setJobRole(e.target.value)} placeholder="e.g. Software Engineer" style={{ width: "100%", padding: "10px 14px", borderRadius: 8, background: "#0A0A0F", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", fontSize: 14, outline: "none", boxSizing: "border-box" }} />
+        {/* Core Control Center Upload Box (Hidden for History View) */}
+        {activeTab !== "history" && (
+          <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 24, marginBottom: 20 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
+              <div>
+                <label style={{ fontSize: 13, color: "#999", display: "block", marginBottom: 8 }}>Job Role</label>
+                <input value={jobRole} onChange={(e) => setJobRole(e.target.value)} placeholder="e.g. Software Engineer" style={{ width: "100%", padding: "10px 14px", borderRadius: 8, background: "#0A0A0F", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", fontSize: 14, outline: "none", boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 13, color: "#999", display: "block", marginBottom: 8 }}>Resume (PDF)</label>
+                <input type="file" accept=".pdf" onChange={(e) => setFile(e.target.files[0])} style={{ width: "100%", padding: "9px 14px", borderRadius: 8, background: "#0A0A0F", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", fontSize: 13, boxSizing: "border-box" }} />
+              </div>
             </div>
-            <div>
-              <label style={{ fontSize: 13, color: "#999", display: "block", marginBottom: 8 }}>Resume (PDF)</label>
-              <input type="file" accept=".pdf" onChange={(e) => setFile(e.target.files[0])} style={{ width: "100%", padding: "9px 14px", borderRadius: 8, background: "#0A0A0F", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", fontSize: 13, boxSizing: "border-box" }} />
-            </div>
-          </div>
 
-          {activeTab === "analyze" && (
-            <button onClick={handleAnalyze} disabled={loading} style={{ padding: "11px 28px", borderRadius: 8, border: "none", background: loading ? "#333" : "#F59E0B", color: loading ? "#666" : "#000", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
-              <Zap size={16} />
-              {loading ? "Analyzing..." : "Analyze Resume"}
-            </button>
-          )}
-
-          {activeTab === "rewrite" && (
-            <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={handleRewrite} disabled={rewriteLoading} style={{ padding: "11px 28px", borderRadius: 8, border: "none", background: rewriteLoading ? "#333" : "#F59E0B", color: rewriteLoading ? "#666" : "#000", fontWeight: 700, cursor: rewriteLoading ? "not-allowed" : "pointer", fontSize: 14 }}>
-                {rewriteLoading ? "Rewriting..." : "✨ Rewrite Resume"}
+            {activeTab === "analyze" && (
+              <button onClick={handleAnalyze} disabled={loading} style={{ padding: "11px 28px", borderRadius: 8, border: "none", background: loading ? "#333" : "#F59E0B", color: loading ? "#666" : "#000", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
+                <Zap size={16} />
+                {loading ? "Analyzing..." : "Analyze Resume"}
               </button>
-              {rewritten && (
-                <button onClick={downloadPDF} style={{ padding: "11px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "#fff", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
-                  <Download size={15} />
-                  Download PDF
+            )}
+
+            {activeTab === "rewrite" && (
+              <div style={{ display: "flex", gap: 12 }}>
+                <button onClick={handleRewrite} disabled={rewriteLoading} style={{ padding: "11px 28px", borderRadius: 8, border: "none", background: rewriteLoading ? "#333" : "#F59E0B", color: rewriteLoading ? "#666" : "#000", fontWeight: 700, cursor: rewriteLoading ? "not-allowed" : "pointer", fontSize: 14 }}>
+                  {rewriteLoading ? "Rewriting..." : "✨ Rewrite Resume"}
                 </button>
-              )}
-            </div>
-          )}
+                {rewritten && (
+                  <button onClick={downloadPDF} style={{ padding: "11px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "#fff", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
+                    <Download size={15} />
+                    Download PDF
+                  </button>
+                )}
+              </div>
+            )}
 
-          {activeTab === "interview" && !showChat && (
-            <button onClick={triggerInterviewDetails} style={{ padding: "11px 28px", borderRadius: 8, border: "none", background: "#F59E0B", color: "#000", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
-              🎤 Start Mock Interview
-            </button>
-          )}
-        </div>
+            {activeTab === "interview" && !showChat && (
+              <button onClick={triggerInterviewDetails} style={{ padding: "11px 28px", borderRadius: 8, border: "none", background: "#F59E0B", color: "#000", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+                🎤 Start Mock Interview
+              </button>
+            )}
+          </div>
+        )}
 
-        {/* Student Data Info Popup Modal */}
+        {/* Student Metadata Popup */}
         {showStudentPopup && (
           <div style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
             <div style={{ background: "#13131A", padding: 30, borderRadius: 16, border: "1px solid rgba(255,255,255,0.1)", width: "100%", maxWidth: 380 }}>
@@ -323,47 +347,74 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Global Loading Spinner state display */}
-        {(loading || rewriteLoading || jdLoading || coverLoading) && (
+        {/* Global Action Spinner Display */}
+        {(loading || rewriteLoading || jdLoading || coverLoading || historyLoading) && (
           <div style={{ padding: 20, background: "#13131A", borderRadius: 14, border: "1px solid rgba(245,158,11,0.2)", marginBottom: 20, display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ width: 20, height: 20, border: "2px solid #F59E0B", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-            <span style={{ color: "#F59E0B", fontSize: 14, fontWeight: 600 }}>{loaderText}</span>
+            <span style={{ color: "#F59E0B", fontSize: 14, fontWeight: 600 }}>{activeTab === "history" ? "Fetching tracking ledger..." : loaderText}</span>
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </div>
         )}
 
-        {/* Analysis Result */}
+        {/* Analysis Result Container System */}
         {activeTab === "analyze" && result && (
-          <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 24 }}>
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                <span style={{ color: "#999", fontSize: 14 }}>ATS Score</span>
-                <span style={{ fontWeight: 700, fontSize: 18, color: result.score >= 70 ? "#22c55e" : result.score >= 50 ? "#F59E0B" : "#ef4444" }}>{result.score}/100</span>
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 24 }}>
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                  <span style={{ color: "#999", fontSize: 14 }}>ATS Score Matrix</span>
+                  <span style={{ fontWeight: 700, fontSize: 18, color: result.score >= 70 ? "#22c55e" : result.score >= 50 ? "#F59E0B" : "#ef4444" }}>{result.score}/100</span>
+                </div>
+                <div style={{ height: 8, background: "#1a1a2a", borderRadius: 99, overflow: "hidden" }}>
+                  <div style={{ height: "100%", borderRadius: 99, width: `${result.score}%`, background: result.score >= 70 ? "#22c55e" : result.score >= 50 ? "#F59E0B" : "#ef4444", transition: "width 0.8s ease" }} />
+                </div>
               </div>
-              <div style={{ height: 8, background: "#1a1a2a", borderRadius: 99, overflow: "hidden" }}>
-                <div style={{ height: "100%", borderRadius: 99, width: `${result.score}%`, background: result.score >= 70 ? "#22c55e" : result.score >= 50 ? "#F59E0B" : "#ef4444", transition: "width 0.8s ease" }} />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+                <div>
+                  <h3 style={{ color: "#22c55e", fontSize: 15, marginBottom: 12 }}>Hexagonal Strengths</h3>
+                  {result.strengths?.map((s, i) => (
+                    <div key={i} style={{ fontSize: 13, color: "#ccc", marginBottom: 8, display: "flex", gap: 8 }}>
+                      <CheckCircle size={14} color="#22c55e" style={{ flexShrink: 0, marginTop: 2 }} />
+                      {s}
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <h3 style={{ color: "#F59E0B", fontSize: 15, marginBottom: 12 }}>Core Improvements</h3>
+                  {result.improvements?.map((s, i) => (
+                    <div key={i} style={{ fontSize: 13, color: "#ccc", marginBottom: 8, display: "flex", gap: 8 }}>
+                      <AlertCircle size={14} color="#F59E0B" style={{ flexShrink: 0, marginTop: 2 }} />
+                      {s}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-              <div>
-                <h3 style={{ color: "#22c55e", fontSize: 15, marginBottom: 12 }}>✅ Strengths</h3>
-                {result.strengths?.map((s, i) => (
-                  <div key={i} style={{ fontSize: 13, color: "#ccc", marginBottom: 8, display: "flex", gap: 8 }}>
-                    <CheckCircle size={14} color="#22c55e" style={{ flexShrink: 0, marginTop: 2 }} />
-                    {s}
+
+            {/* Missing Keywords Section */}
+            {result.missing_keywords?.length > 0 && (
+              <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 24 }}>
+                <h3 style={{ fontSize: 15, marginBottom: 12, color: "#ef4444" }}>❌ Missing Structural Keywords</h3>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {result.missing_keywords.map((k, i) => (
+                    <span key={i} style={{ padding: "4px 12px", borderRadius: 99, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", fontSize: 12, color: "#ef4444" }}>{k}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Improved Bullet Points Action Section */}
+            {result.improved_bullets?.length > 0 && (
+              <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 24 }}>
+                <h3 style={{ fontSize: 15, marginBottom: 12, color: "#F59E0B" }}>💡 AI Enhanced Bullet Points layout</h3>
+                {result.improved_bullets.map((b, i) => (
+                  <div key={i} style={{ background: "#0A0A0F", borderRadius: 8, padding: 14, marginBottom: 10, fontSize: 13, border: "1px solid rgba(255,255,255,0.03)" }}>
+                    <div style={{ color: "#666", marginBottom: 6 }}><span style={{ fontWeight: 600 }}>Original:</span> {b.original || b.before}</div>
+                    <div style={{ color: "#22c55e" }}><span style={{ fontWeight: 600 }}>Upgraded:</span> {b.improved || b.after}</div>
                   </div>
                 ))}
               </div>
-              <div>
-                <h3 style={{ color: "#F59E0B", fontSize: 15, marginBottom: 12 }}>⚠️ Improvements</h3>
-                {result.improvements?.map((s, i) => (
-                  <div key={i} style={{ fontSize: 13, color: "#ccc", marginBottom: 8, display: "flex", gap: 8 }}>
-                    <AlertCircle size={14} color="#F59E0B" style={{ flexShrink: 0, marginTop: 2 }} />
-                    {s}
-                  </div>
-                ))}
-              </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -375,7 +426,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Interview Chat Dashboard view */}
+        {/* Interview Chat Section */}
         {activeTab === "interview" && showChat && (
           <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, overflow: "hidden" }}>
             <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -399,7 +450,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* JD Match UI */}
+        {/* JD Match Tab UI */}
         {activeTab === "jd" && (
           <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 24 }}>
             <h3 style={{ marginBottom: 16 }}>🎯 Job Description Match</h3>
@@ -412,7 +463,7 @@ export default function Dashboard() {
               <div style={{ marginTop: 24 }}>
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                    <span style={{ color: "#999", fontSize: 14 }}>Match Score</span>
+                    <span style={{ color: "#999", fontSize: 14 }}>Match Score Percentage</span>
                     <span style={{ fontWeight: 700, fontSize: 18, color: jdResult.match_score >= 70 ? "#22c55e" : jdResult.match_score >= 50 ? "#F59E0B" : "#ef4444" }}>{jdResult.match_score}%</span>
                   </div>
                   <div style={{ height: 8, background: "#1a1a2a", borderRadius: 99, overflow: "hidden" }}>
@@ -465,6 +516,32 @@ export default function Dashboard() {
             )}
           </div>
         )}
+
+        {/* Dynamic Tracking History Tab View */}
+        {activeTab === "history" && !historyLoading && (
+          <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 24 }}>
+            <h3 style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}><History size={18} color="#F59E0B"/> ATS Analysis Tracing History</h3>
+            {historyData && historyData.length === 0 ? (
+              <p style={{ color: "#555", fontSize: 14, textAlign: "center", padding: "20px 0" }}>No archival metrics captured in this session profile tracker database ledger lines.</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {historyData && historyData.map((h) => (
+                  <div key={h.id} style={{ background: "#0A0A0F", padding: 16, borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <h4 style={{ margin: "0 0 4px", fontSize: 15, color: "#fff" }}><FileText size={14} style={{ marginRight: 6 }}/>{h.job_role}</h4>
+                      <span style={{ fontSize: 12, color: "#444" }}>Processed: {new Date(h.created_at).toLocaleDateString()}</span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                      <span style={{ fontWeight: 700, fontSize: 16, color: h.score >= 70 ? "#22c55e" : h.score >= 50 ? "#F59E0B" : "#ef4444" }}>{h.score}/100</span>
+                      <button onClick={() => { setResult(h.result); setActiveTab("analyze"); toast.success("Historical metrics cached into runtime viewport."); }} style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)", color: "#F59E0B", padding: "5px 12px", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>View Summary</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
     </div>
   );

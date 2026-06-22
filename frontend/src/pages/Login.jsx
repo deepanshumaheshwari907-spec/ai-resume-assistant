@@ -9,7 +9,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth(); // Agar aapke context mein koi special googleLogin function hai toh wo bhi add kar sakte hain
+  const { login, googleLogin } = useAuth(); // Agar aapke context mein koi special googleLogin function hai toh wo bhi add kar sakte hain
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -27,28 +27,36 @@ export default function Login() {
 
   // Google Login Success Handler
   const handleGoogleSuccess = async (credentialResponse) => {
-    setLoading(true);
-    try {
-      const token = credentialResponse.credential;
-      
-      // Deepanshu, yahan hum tumhare FastAPI backend ko hit karenge
-      // Abhi ke liye main '/api/auth/google' likh raha hoon, tum apne actual route se badal lena
-    const res = await axios.post("https://resumeai-backend-nv09.onrender.com/auth/google", {
-      token: token
-      });
+  setLoading(true);
 
-      if (res.data) {
-        toast.success("Google Login Successful! 🚀");
-        // Yahan agar auth context mein token save karna ho toh wo logic aayega
-        navigate("/dashboard");
+  try {
+    const res = await axios.post(
+      "https://resumeai-backend-nv09.onrender.com/auth/google",
+      {
+        token: credentialResponse.credential,
       }
-    } catch (err) {
-      console.error("Google Auth Error:", err);
-      toast.error("Google login failed. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    );
+
+    googleLogin(
+      res.data.token,
+      res.data.user
+    );
+
+    toast.success("Google Login Successful! 🚀");
+
+    navigate("/dashboard", { replace: true });
+
+  } catch (err) {
+    console.error("Google Auth Error:", err);
+
+    toast.error(
+      err.response?.data?.detail ||
+      "Google login failed"
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div style={{ minHeight: "100vh", background: "#080810", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>

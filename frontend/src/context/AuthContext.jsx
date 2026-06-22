@@ -6,6 +6,7 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  
 
   useEffect(() => {
     const stored = localStorage.getItem("user");
@@ -23,6 +24,12 @@ export function AuthProvider({ children }) {
     setUser(user);
     return user;
   };
+
+  const googleLogin = (token, user) => {
+  localStorage.setItem("token", token);
+  localStorage.setItem("user", JSON.stringify(user));
+  setUser(user);
+};
 
   // 📝 Updated for OTP Verification Flow
   const signup = async (name, email, password) => {
@@ -48,7 +55,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout, refreshUser,  googleLogin}}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,13 +1,18 @@
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import HTTPException, Depends
+from fastapi import HTTPException, Depends, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from database import get_db, User
 import os
 
-SECRET_KEY = os.getenv("SECRET_KEY", "resumeai-secret-key-2025")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment variable is required")
+
+ADMIN_SECRET = os.getenv("ADMIN_SECRET", "")
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 30
 
@@ -42,3 +47,7 @@ def get_current_user(
         return user
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
+
+def verify_admin(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
+    if not ADMIN_SECRET or x_admin_secret != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="Admin access denied")

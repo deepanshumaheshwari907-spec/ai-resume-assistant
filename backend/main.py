@@ -25,24 +25,16 @@ load_dotenv()
 app = FastAPI()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-GMAIL_USER = os.getenv("GMAIL_USER", "")
-GMAIL_PASS = os.getenv("GMAIL_PASS", "")
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+# GMAIL CONFIGURATION FOR OTP SYSTEM AND REPORTING
+GMAIL_USER = "deepanshumaheshwari907@gmail.com"  
+GMAIL_PASS = "aksw xoxw bpxe rdbh"   
+GOOGLE_CLIENT_ID = "31578202480-r2c7fsfcmh6or9ec566qvt2v35e882ma.apps.googleusercontent.com"
 
-ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv(
-        "ALLOWED_ORIGINS",
-        "http://localhost:3000,http://127.0.0.1:3000,https://ai-resume-assistant-cyan.vercel.app",
-    ).split(",")
-    if origin.strip()
-]
-
+# CORS Middleware with explicit configuration for security
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_origins=["*"],  
+    allow_credentials=False, 
     allow_methods=["*"],
     allow_headers=["*"],
 )
