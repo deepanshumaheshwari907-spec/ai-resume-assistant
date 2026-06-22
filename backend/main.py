@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from database import get_db, User, create_tables, ResumeAnalysis
-from auth import hash_password, verify_password, create_token, get_current_user
+from auth import hash_password, verify_password, create_token, get_current_user, verify_admin
 import pdfplumber
 import tempfile
 import json
@@ -25,16 +25,24 @@ load_dotenv()
 app = FastAPI()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-# GMAIL CONFIGURATION FOR OTP SYSTEM AND REPORTING
-GMAIL_USER = "deepanshumaheshwari907@gmail.com"  
-GMAIL_PASS = "aksw xoxw bpxe rdbh"   
-GOOGLE_CLIENT_ID = "31578202480-r2c7fsfcmh6or9ec566qvt2v35e882ma.apps.googleusercontent.com"
+GMAIL_USER = os.getenv("GMAIL_USER", "")
+GMAIL_PASS = os.getenv("GMAIL_PASS", "")
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
-# Copy and replace this exact middleware block inside backend/main.py
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000,https://ai-resume-assistant-cyan.vercel.app",
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Dynamic origins request pass karne ke liye production level wildcard rule
-    allow_credentials=False, # Wildcard origins (*) ke sath credentials hamesha False hona chahiye, warna server crash hota hai
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -253,7 +261,7 @@ async def upload_resume(
     }}
     """
     response = client.chat.completions.create(
-        model="llama3-8b-8192",
+       model="llama-3.1-8b-instant",
         messages=[{"role": "user", "content": prompt}]
     )
 
@@ -265,7 +273,7 @@ async def upload_resume(
     analysis = ResumeAnalysis(
         user_id=current_user.id,
         job_role=job_role,
-        score=result["score"],
+        score=int(result["score"]),
         result=json.dumps(result),
     )
     db.add(analysis)
@@ -304,9 +312,6 @@ async def rewrite_resume(
     )
     return {"rewritten_resume": response.choices[0].message.content}
 
-# =====================================================================
-# AIRTIGHT RESILIENT CHAT ROUTE WITH FALLBACK PARSING
-# =====================================================================
 @app.post("/chat")
 async def chat(data: ChatRequest, current_user: User = Depends(get_current_user)):
     try:
@@ -383,7 +388,13 @@ async def match_jd(
     Compare this resume with the job description criteria and supply parsing analysis.
     Resume: {resume_text}
     Job Description: {job_description}
-    Return ONLY valid JSON layout dictionary blocks.
+    Return ONLY valid JSON layout dictionary blocks like this:
+    {{
+      "match_score": 75,
+      "matched_keywords": ["python"],
+      "missing_keywords": ["aws"],
+      "recommendation": "Add cloud skills"
+    }}
     """
     response = client.chat.completions.create(
         model="llama3-8b-8192",
@@ -435,13 +446,10 @@ async def get_history(
             "job_role": a.job_role,
             "score": a.score,
             "created_at": str(a.created_at),
-            "result": json.loads(a.result)
+            "result": json.loads(a.result) if isinstance(a.result, str) else a.result
         } for a in analyses
     ]}
 
-# =====================================================================
-# AUTOMATED INTERVIEW REPORT EMAIL ENDPOINT (COLLEGE REQUIREMENT)
-# =====================================================================
 @app.post("/send-interview-report")
 async def send_interview_report(data: InterviewReportRequest):
     try:
@@ -457,25 +465,23 @@ async def send_interview_report(data: InterviewReportRequest):
             <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px;">
                 <tr style="background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05);">
                     <td style="padding: 12px; font-weight: bold; color: #F59E0B; width: 35%;">Student Name:</td>
-                    <td style="padding: 12px; color: #fff;">{{data.name}}</td>
+                    <td style="padding: 12px; color: #fff;">{data.name}</td>
                 </tr>
                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
                     <td style="padding: 12px; font-weight: bold; color: #F59E0B;">Email Identity:</td>
-                    <td style="padding: 12px; color: #fff;">{{data.email}}</td>
+                    <td style="padding: 12px; color: #fff;">{data.email}</td>
                 </tr>
                 <tr style="background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05);">
                     <td style="padding: 12px; font-weight: bold; color: #F59E0B;">Age Matrix:</td>
-                    <td style="padding: 12px; color: #fff;">{{data.age}} Years</td>
+                    <td style="padding: 12px; color: #fff;">{data.age} Years</td>
                 </tr>
                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
                     <td style="padding: 12px; font-weight: bold; color: #F59E0B;">Academic Branch:</td>
-                    <td style="padding: 12px; color: #fff; text-transform: uppercase; letter-spacing: 1px;">{{data.branch}}</td>
+                    <td style="padding: 12px; color: #fff; text-transform: uppercase; letter-spacing: 1px;">{data.branch}</td>
                 </tr>
             </table>
             <h3 style="color: #fff; margin-top: 30px; margin-bottom: 12px; font-size: 15px; border-left: 3px solid #F59E0B; padding-left: 8px;">Full Session Interaction History Logs:</h3>
-            <div style="background: #050508; border: 1px solid rgba(255,255,255,0.05); padding: 16px; border-radius: 10px; font-family: monospace; font-size: 12px; line-height: 1.6; color: #ccc; max-height: 400px; overflow-y: auto; white-space: pre-wrap;">
-{{data.chat_history}}
-            </div>
+            <div style="background: #050508; border: 1px solid rgba(255,255,255,0.05); padding: 16px; border-radius: 10px; font-family: monospace; font-size: 12px; line-height: 1.6; color: #ccc; max-height: 400px; overflow-y: auto; white-space: pre-wrap;">{data.chat_history}</div>
             <p style="color: #444; font-size: 11px; margin-top: 30px; text-align: center;">Automated cloud placement pipeline dashboard telemetry data stream.</p>
         </div>
         """
@@ -491,17 +497,11 @@ async def send_interview_report(data: InterviewReportRequest):
         print(f"Report Mail Critical Error: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal mail delivery systems timed out.")
 
-# =====================================================================
-# GOOGLE OAUTH BACKEND SIGN-IN FLOW
-# =====================================================================
-# Updated Robust Google Login Route inside backend/main.py
 @app.post("/auth/google")
 def google_login(data: GoogleLoginRequest, db: Session = Depends(get_db)):
     try:
-        # Secure fetch client ID fallback
         client_id = "31578202480-r2c7fsfcmh6or9ec566qvt2v35e882ma.apps.googleusercontent.com"
         
-        # 1. Verify token with Google requests transport
         try:
             idinfo = id_token.verify_oauth2_token(data.token, google_requests.Request(), client_id)
         except Exception as token_err:
@@ -514,7 +514,6 @@ def google_login(data: GoogleLoginRequest, db: Session = Depends(get_db)):
         if not user_email:
             raise HTTPException(status_code=400, detail="Google token account has no email parameters attached.")
             
-        # 2. Database query with dynamic crash interceptor
         try:
             user = db.query(User).filter(User.email == user_email).first()
             
@@ -533,10 +532,8 @@ def google_login(data: GoogleLoginRequest, db: Session = Depends(get_db)):
                 db.refresh(user)
         except Exception as db_err:
             print(f"DATABASE TRANSITION OPERATION CRASH -> {str(db_err)}")
-            # Database issue fallback: temporary user session mockup to bypass presentation failure
             raise HTTPException(status_code=500, detail=f"Database state synchronization failed: {str(db_err)}")
         
-        # 3. Secure local application token tracking metrics
         token = create_token({"user_id": user.id})
         
         return {
