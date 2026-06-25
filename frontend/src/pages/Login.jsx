@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
 import { GoogleLogin } from '@react-oauth/google';
-import axios from "axios"; // Agar axios use kar rahe ho backend hit karne ke liye
+import api from "../utils/api";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -30,12 +30,9 @@ export default function Login() {
   setLoading(true);
 
   try {
-    const res = await axios.post(
-      "https://resumeai-backend-nv09.onrender.com/auth/google",
-      {
-        token: credentialResponse.credential,
-      }
-    );
+    const res = await api.post("/auth/google", {
+      token: credentialResponse.credential,
+    });
 
     googleLogin(
       res.data.token,

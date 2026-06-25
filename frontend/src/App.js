@@ -23,9 +23,8 @@ export default function App() {
           <Route path="/dashboard" element={
             <ProtectedRoute><Dashboard /></ProtectedRoute>
           } />
-          <Route path="*" element={<Navigate to="/" replace />} />
-          <Route path="*" element={<NotFound />} />
           <Route path="/terms" element={<Terms />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

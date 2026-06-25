@@ -25,16 +25,24 @@ load_dotenv()
 app = FastAPI()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-# GMAIL CONFIGURATION FOR OTP SYSTEM AND REPORTING
-GMAIL_USER = "deepanshumaheshwari907@gmail.com"  
-GMAIL_PASS = "aksw xoxw bpxe rdbh"   
-GOOGLE_CLIENT_ID = "31578202480-r2c7fsfcmh6or9ec566qvt2v35e882ma.apps.googleusercontent.com"
+GMAIL_USER = os.getenv("GMAIL_USER", "")
+GMAIL_PASS = os.getenv("GMAIL_PASS", "")
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
-# CORS Middleware with explicit configuration for security
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000,https://ai-resume-assistant-cyan.vercel.app",
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  
-    allow_credentials=False, 
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -43,6 +51,9 @@ create_tables()
 
 # Local Helper Function to send Email via Python smtplib (Airtight & Dependency-free)
 def send_otp_email(target_email: str, otp_code: str):
+    if not GMAIL_USER or not GMAIL_PASS:
+        print("Email not configured: set GMAIL_USER and GMAIL_PASS in .env")
+        return False
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = "Verify your ResumeAI Account 🎉"
@@ -144,7 +155,7 @@ def verify_otp(data: OTPVerifyRequest, db: Session = Depends(get_db)):
     
     current_otp = getattr(user, 'otp_code', None)
     
-    if current_otp == data.otp or data.otp == "999999": 
+    if current_otp == data.otp: 
         user.is_verified = True
         user.otp_code = None
         db.commit()
@@ -202,7 +213,7 @@ def get_me(current_user: User = Depends(get_current_user)):
     }
 
 @app.get("/make-pro/{email}")
-def make_pro(email: str, db: Session = Depends(get_db)):
+def make_pro(email: str, db: Session = Depends(get_db), _: None = Depends(verify_admin)):
     user = db.query(User).filter(User.email == email).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -253,7 +264,7 @@ async def upload_resume(
     }}
     """
     response = client.chat.completions.create(
-       model="llama-3.1-8b-instant",
+       model=GROQ_MODEL,
         messages=[{"role": "user", "content": prompt}]
     )
 
@@ -299,7 +310,7 @@ async def rewrite_resume(
     Return ONLY the formatted resume text.
     """
     response = client.chat.completions.create(
-        model="llama3-8b-8192",
+        model=GROQ_MODEL,
         messages=[{"role": "user", "content": prompt}]
     )
     return {"rewritten_resume": response.choices[0].message.content}
@@ -328,7 +339,7 @@ async def chat(data: ChatRequest, current_user: User = Depends(get_current_user)
         """
         
         response = client.chat.completions.create(
-            model="llama3-8b-8192",
+            model=GROQ_MODEL,
             messages=[{"role": "user", "content": prompt}]
         )
 
@@ -389,7 +400,7 @@ async def match_jd(
     }}
     """
     response = client.chat.completions.create(
-        model="llama3-8b-8192",
+        model=GROQ_MODEL,
         messages=[{"role": "user", "content": prompt}]
     )
     raw = response.choices[0].message.content
@@ -418,7 +429,7 @@ async def generate_cover_letter(
     Resume payload parameters: {resume_text}
     """
     response = client.chat.completions.create(
-        model="llama3-8b-8192",
+        model=GROQ_MODEL,
         messages=[{"role": "user", "content": prompt}]
     )
     return {"cover_letter": response.choices[0].message.content}
@@ -443,7 +454,10 @@ async def get_history(
     ]}
 
 @app.post("/send-interview-report")
-async def send_interview_report(data: InterviewReportRequest):
+async def send_interview_report(
+    data: InterviewReportRequest,
+    current_user: User = Depends(get_current_user),
+):
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = f"📋 Placement Assessment Report: {data.name} ({data.branch})"
@@ -492,10 +506,11 @@ async def send_interview_report(data: InterviewReportRequest):
 @app.post("/auth/google")
 def google_login(data: GoogleLoginRequest, db: Session = Depends(get_db)):
     try:
-        client_id = "31578202480-r2c7fsfcmh6or9ec566qvt2v35e882ma.apps.googleusercontent.com"
-        
+        if not GOOGLE_CLIENT_ID:
+            raise HTTPException(status_code=500, detail="Google OAuth is not configured on the server.")
+
         try:
-            idinfo = id_token.verify_oauth2_token(data.token, google_requests.Request(), client_id)
+            idinfo = id_token.verify_oauth2_token(data.token, google_requests.Request(), GOOGLE_CLIENT_ID)
         except Exception as token_err:
             print(f"GOOGLE TOKEN VERIFICATION CRASH -> {str(token_err)}")
             raise HTTPException(status_code=400, detail=f"Token validation failed: {str(token_err)}")
