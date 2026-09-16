@@ -6,12 +6,12 @@ passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 pdfplumber
 python-multipart
-groq
 python-dotenv
 pydantic
-psycopg2-binary==2.9.9
+#psycopg2-binary==2.9.9
 requests
 google-auth
 google-auth-oauthlib
 google-auth-httplib2
 email-validator
+openai>=1.0.0

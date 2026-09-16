@@ -1,8 +1,11 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
-from database import get_db, User, create_tables, ResumeAnalysis
+from database import get_db, User, Resume, ResumeAnalysis, JobOpportunity, create_tables
 from auth import hash_password, verify_password, create_token, get_current_user, verify_admin
 import pdfplumber
 import tempfile
@@ -13,22 +16,20 @@ import random
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from groq import Groq
-from dotenv import load_dotenv
+#from dotenv import load_dotenv
+from openai_service import analyze_resume, rewrite_resume, match_job, generate_cover_letter, interview_turn, generate_application_prep
 
 # --- GOOGLE AUTH PACKAGES ---
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 
-load_dotenv()
+#load_dotenv()
 
 app = FastAPI()
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 GMAIL_USER = os.getenv("GMAIL_USER", "")
 GMAIL_PASS = os.getenv("GMAIL_PASS", "")
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
 ALLOWED_ORIGINS = [
     origin.strip()
@@ -52,11 +53,11 @@ create_tables()
 # Local Helper Function to send Email via Python smtplib (Airtight & Dependency-free)
 def send_otp_email(target_email: str, otp_code: str):
     if not GMAIL_USER or not GMAIL_PASS:
-        print("Email not configured: set GMAIL_USER and GMAIL_PASS in .env")
-        return False
+        print(f"[DEV OTP] {target_email} -> {otp_code}")
+        return 
     try:
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = "Verify your ResumeAI Account 🎉"
+        msg["Subject"] = "Verify your ResumeAI Account ðŸŽ‰"
         msg["From"] = GMAIL_USER
         msg["To"] = target_email
 
@@ -107,6 +108,16 @@ class InterviewReportRequest(BaseModel):
     branch: str
     chat_history: str
 
+
+class OpportunityCreateRequest(BaseModel):
+    company_name: str
+    job_title: str
+    job_description: str
+
+
+class OpportunityStatusRequest(BaseModel):
+    status: str
+
 @app.get("/")
 def health_check():
     return {"status": "ok"}
@@ -130,7 +141,7 @@ def signup(data: SignupRequest, db: Session = Depends(get_db)):
         hashed_password=hash_password(data.password),
         plan="free",
         usage_count=0,
-        analysis_limit=2,
+        analysis_limit=20,
     )
     
     user.otp_code = generated_otp
@@ -230,6 +241,55 @@ def extract_text(file_path: str) -> str:
             text += page.extract_text() or ""
     return text
 
+
+async def resolve_resume_text(
+    file: UploadFile | None,
+    resume_id: int | None,
+    current_user: User,
+    db: Session,
+) -> str:
+    """Resolve resume text from a fresh PDF upload or the user's saved resume."""
+    if resume_id is not None:
+        resume = (
+            db.query(Resume)
+            .filter(
+                Resume.id == resume_id,
+                Resume.user_id == current_user.id,
+                Resume.is_active == True,
+            )
+            .first()
+        )
+        if not resume:
+            raise HTTPException(status_code=404, detail="Saved resume not found.")
+        return (resume.content or "").strip()
+
+    if file is None or not file.filename:
+        raise HTTPException(status_code=400, detail="Upload a resume or select your saved resume.")
+
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF resumes are supported.")
+
+    raw_file = await file.read()
+    if len(raw_file) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Resume PDF must be 10 MB or smaller.")
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(raw_file)
+            tmp_path = tmp.name
+
+        resume_text = extract_text(tmp_path).strip()
+        if len(resume_text) < 80:
+            raise HTTPException(
+                status_code=400,
+                detail="We could not extract enough text from this PDF. Try a text-based PDF instead of a scanned image.",
+            )
+        return resume_text
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
 @app.post("/upload-resume")
 async def upload_resume(
     file: UploadFile = File(...),
@@ -237,202 +297,586 @@ async def upload_resume(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if not file.filename.lower().endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Unsupported format. Only structural PDF parsing accepted.")
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF resumes are supported.")
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-        tmp.write(await file.read())
-        tmp_path = tmp.name
+    if current_user.usage_count >= current_user.analysis_limit:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Free analysis limit reached ({current_user.analysis_limit}). Upgrade or wait for the next plan period.",
+        )
 
-    resume_text = extract_text(tmp_path)
-    os.unlink(tmp_path)
+    raw_file = await file.read()
+    if len(raw_file) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Resume PDF must be 10 MB or smaller.")
 
-    if not resume_text.strip():
-        raise HTTPException(status_code=400, detail="Unable to extract meaningful data lines from document.")
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(raw_file)
+            tmp_path = tmp.name
 
-    prompt = f"""
-    You are an expert ATS resume analyzer. Analyze this resume for the role: {job_role}
-    Resume: {resume_text}
-    Return ONLY valid JSON like this:
-    {{
-      "score": 75,
-      "strengths": ["strength 1"],
-      "improvements": ["improvement 1"],
-      "missing_keywords": ["keyword1"],
-      "improved_bullets": [{{"original": "old", "improved": "new"}}],
-      "ats_issues": ["issue 1"]
-    }}
-    """
-    response = client.chat.completions.create(
-       model=GROQ_MODEL,
-        messages=[{"role": "user", "content": prompt}]
+        resume_text = extract_text(tmp_path).strip()
+        if len(resume_text) < 80:
+            raise HTTPException(
+                status_code=400,
+                detail="We could not extract enough text from this PDF. Try a text-based PDF instead of a scanned image.",
+            )
+
+        # Make the newly uploaded resume the user's active resume.
+        db.query(Resume).filter(
+            Resume.user_id == current_user.id,
+            Resume.is_active == True,
+        ).update({"is_active": False})
+
+        resume = Resume(
+            user_id=current_user.id,
+            filename=file.filename,
+            content=resume_text,
+            is_active=True,
+        )
+        db.add(resume)
+        db.flush()
+
+        role = job_role.strip()[:200] or "Software Engineer"
+        result = analyze_resume(resume_text, role)
+
+        analysis = ResumeAnalysis(
+            user_id=current_user.id,
+            job_role=role,
+            score=int(result["score"]),
+            result=json.dumps(result),
+        )
+        db.add(analysis)
+        current_user.usage_count += 1
+        db.commit()
+
+        return {"result": result}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        print(f"Resume analysis error: {exc}")
+        raise HTTPException(status_code=502, detail="Resume analysis service failed. Please try again.")
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+@app.get("/resume/latest")
+def get_latest_resume(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    resume = (
+        db.query(Resume)
+        .filter(
+            Resume.user_id == current_user.id,
+            Resume.is_active == True,
+        )
+        .order_by(Resume.created_at.desc())
+        .first()
     )
 
-    raw = response.choices[0].message.content
-    start = raw.find("{")
-    end = raw.rfind("}") + 1
-    result = json.loads(raw[start:end])
+    if not resume:
+        return {"resume": None}
 
-    analysis = ResumeAnalysis(
-        user_id=current_user.id,
-        job_role=job_role,
-        score=int(result["score"]),
-        result=json.dumps(result),
-    )
-    db.add(analysis)
+    return {
+        "resume": {
+            "id": resume.id,
+            "filename": resume.filename,
+            "created_at": str(resume.created_at),
+            "is_active": resume.is_active,
+        }
+    }
 
-    current_user.usage_count += 1
-    db.commit()
-
-    return {"result": result}
-
-@app.post("/rewrite")
-async def rewrite_resume(
-    file: UploadFile = File(...),
+@app.post("/analyze-saved-resume")
+async def analyze_saved_resume(
+    resume_id: int = Form(...),
     job_role: str = Form("Software Engineer"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if not file.filename.lower().endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Only standard PDF uploads are compatible.")
+    if current_user.usage_count >= current_user.analysis_limit:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Free analysis limit reached ({current_user.analysis_limit}). Upgrade or wait for the next plan period.",
+        )
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-        tmp.write(await file.read())
-        tmp_path = tmp.name
+    resume_text = await resolve_resume_text(None, resume_id, current_user, db)
+    role = job_role.strip()[:200] or "Software Engineer"
 
-    resume_text = extract_text(tmp_path)
-    os.unlink(tmp_path)
+    try:
+        result = analyze_resume(resume_text, role)
+        analysis = ResumeAnalysis(
+            user_id=current_user.id,
+            job_role=role,
+            score=int(result["score"]),
+            result=json.dumps(result),
+        )
+        db.add(analysis)
+        current_user.usage_count += 1
+        db.commit()
+        return {"result": result}
+    except Exception as exc:
+        db.rollback()
+        print(f"Saved resume analysis error: {exc}")
+        raise HTTPException(status_code=502, detail="Resume analysis service failed. Please try again.")
 
-    prompt = f"""
-    Rewrite this resume for the role: {job_role}
-    Output MUST follow structured CAPS section layout headers with bullet points (•). Include clear numeric metric indicators.
-    Resume to rewrite: {resume_text}
-    Return ONLY the formatted resume text.
-    """
-    response = client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return {"rewritten_resume": response.choices[0].message.content}
+
+@app.post("/rewrite")
+async def rewrite_resume_endpoint(
+    file: UploadFile | None = File(None),
+    resume_id: int | None = Form(None),
+    job_role: str = Form("Software Engineer"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        resume_text = await resolve_resume_text(file, resume_id, current_user, db)
+        rewritten = rewrite_resume(
+            resume_text,
+            job_role.strip()[:200] or "Software Engineer",
+        )
+        return {"rewritten_resume": rewritten}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print(f"Resume rewrite error: {exc}")
+        raise HTTPException(
+            status_code=502,
+            detail="Resume rewrite service failed. Please try again.",
+        )
+
 
 @app.post("/chat")
 async def chat(data: ChatRequest, current_user: User = Depends(get_current_user)):
     try:
-        user_answer = data.answer.strip()
-        chat_history = data.history.strip()
-
-        if user_answer.lower() == "start interview":
+        if data.answer.strip().lower() == "start interview":
             return {
-                "feedback": "Welcome to your interactive AI simulation session.",
-                "next_question": "Excellent. Let's begin. Please tell me about your comprehensive background, your primary tech stack, and a technical project you built recently."
+                "feedback": "Let's begin. Keep answers concise and use examples from your projects.",
+                "next_question": "Tell me about yourself, your primary technical stack, and one technical project you built recently.",
             }
-
-        prompt = f"""
-        You are a professional technical job interviewer panel framework.
-        Conversation history logs: {chat_history}
-        Candidate response string: {user_answer}
-        
-        Provide a very brief evaluation feedback on the user's answer, and then ask the next relevant technical interview question.
-        You MUST structure your response strictly with these headers:
-        FEEDBACK: [Write feedback here]
-        NEXT QUESTION: [Write next question here]
-        """
-        
-        response = client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[{"role": "user", "content": prompt}]
-        )
-
-        content = response.choices[0].message.content
-        feedback, next_q = "", ""
-
-        for line in content.split("\n"):
-            if line.upper().startswith("FEEDBACK:"):
-                feedback = line[len("FEEDBACK:"):].strip()
-            elif line.upper().startswith("NEXT QUESTION:"):
-                next_q = line[len("NEXT QUESTION:"):].strip()
-
-        if not next_q:
-            if "FEEDBACK:" in content and "NEXT QUESTION:" in content:
-                parts = content.split("NEXT QUESTION:")
-                feedback = parts[0].replace("FEEDBACK:", "").strip()
-                next_q = parts[1].strip()
-            else:
-                feedback = "System processed your input metrics safely."
-                next_q = content if content.strip() else "Can you describe how you manage production scalability?"
-
-        return {"feedback": feedback, "next_question": next_q}
-
-    except Exception as e:
-        print(f"Chat Pipeline Crash Warning: {str(e)}")
-        return {
-            "feedback": "Database pipeline tracking active. Good baseline conceptual structure.",
-            "next_question": "Can you explain how you handle state synchronization across distributed microservices?"
-        }
+        result = interview_turn(data.answer.strip(), data.history.strip())
+        return result
+    except Exception as exc:
+        print(f"Interview pipeline error: {exc}")
+        raise HTTPException(status_code=502, detail="Interview AI service failed. Please try again.")
 
 @app.post("/match-jd")
 async def match_jd(
-    file: UploadFile = File(...),
+    file: UploadFile | None = File(None),
+    resume_id: int | None = Form(None),
     job_description: str = Form(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     if not job_description.strip():
-         raise HTTPException(status_code=400, detail="Job description configuration input text values cannot be empty.")
+        raise HTTPException(status_code=400, detail="Job description cannot be empty.")
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-        tmp.write(await file.read())
-        tmp_path = tmp.name
+    try:
+        resume_text = await resolve_resume_text(file, resume_id, current_user, db)
+        result = match_job(resume_text, job_description.strip()[:30000])
+        return {"result": result}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print(f"JD matching error: {exc}")
+        raise HTTPException(
+            status_code=502,
+            detail="JD matching service failed. Please try again.",
+        )
 
-    resume_text = extract_text(tmp_path)
-    os.unlink(tmp_path)
-
-    prompt = f"""
-    Compare this resume with the job description criteria and supply parsing analysis.
-    Resume: {resume_text}
-    Job Description: {job_description}
-    Return ONLY valid JSON layout dictionary blocks like this:
-    {{
-      "match_score": 75,
-      "matched_keywords": ["python"],
-      "missing_keywords": ["aws"],
-      "recommendation": "Add cloud skills"
-    }}
-    """
-    response = client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    raw = response.choices[0].message.content
-    start = raw.find("{")
-    end = raw.rfind("}") + 1
-    result = json.loads(raw[start:end])
-    return {"result": result}
 
 @app.post("/cover-letter")
-async def generate_cover_letter(
-    file: UploadFile = File(...),
+async def generate_cover_letter_endpoint(
+    file: UploadFile | None = File(None),
+    resume_id: int | None = Form(None),
     job_role: str = Form(...),
     company_name: str = Form("the company"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-        tmp.write(await file.read())
-        tmp_path = tmp.name
+    try:
+        resume_text = await resolve_resume_text(file, resume_id, current_user, db)
+        letter = generate_cover_letter(
+            resume_text,
+            job_role.strip()[:200] or "Software Engineer",
+            company_name.strip()[:200] or "the company",
+        )
+        return {"cover_letter": letter}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print(f"Cover letter error: {exc}")
+        raise HTTPException(
+            status_code=502,
+            detail="Cover letter generation failed. Please try again.",
+        )
 
-    resume_text = extract_text(tmp_path)
-    os.unlink(tmp_path)
 
-    prompt = f"""
-    Write a 3-paragraph professional cover letter for {job_role} position inside {company_name}.
-    Resume payload parameters: {resume_text}
-    """
-    response = client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[{"role": "user", "content": prompt}]
+@app.post("/opportunities")
+async def create_opportunity(
+    data: OpportunityCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    company_name = data.company_name.strip()[:200]
+    job_title = data.job_title.strip()[:200]
+    job_description = data.job_description.strip()[:30000]
+
+    if not company_name:
+        raise HTTPException(status_code=400, detail="Company name is required.")
+    if not job_title:
+        raise HTTPException(status_code=400, detail="Job title is required.")
+    if not job_description:
+        raise HTTPException(status_code=400, detail="Job description cannot be empty.")
+
+    opportunity = JobOpportunity(
+        user_id=current_user.id,
+        company_name=company_name,
+        job_title=job_title,
+        job_description=job_description,
+        status="saved",
     )
-    return {"cover_letter": response.choices[0].message.content}
+    db.add(opportunity)
+    db.commit()
+    db.refresh(opportunity)
+
+    return {
+        "opportunity": {
+            "id": opportunity.id,
+            "company_name": opportunity.company_name,
+            "job_title": opportunity.job_title,
+            "status": opportunity.status,
+            "match_score": opportunity.match_score,
+            "created_at": str(opportunity.created_at),
+            "updated_at": str(opportunity.updated_at or opportunity.created_at),
+        }
+    }
+
+
+@app.get("/opportunities")
+async def list_opportunities(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    opportunities = (
+        db.query(JobOpportunity)
+        .filter(JobOpportunity.user_id == current_user.id)
+        .order_by(JobOpportunity.updated_at.desc(), JobOpportunity.id.desc())
+        .limit(50)
+        .all()
+    )
+
+    return {
+        "opportunities": [
+            {
+                "id": item.id,
+                "company_name": item.company_name,
+                "job_title": item.job_title,
+                "status": item.status,
+                "match_score": item.match_score,
+                "created_at": str(item.created_at),
+                "updated_at": str(item.updated_at or item.created_at),
+            }
+            for item in opportunities
+        ]
+    }
+
+
+@app.get("/opportunities/{opportunity_id}")
+async def get_opportunity(
+    opportunity_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    opportunity = db.query(JobOpportunity).filter(
+        JobOpportunity.id == opportunity_id,
+        JobOpportunity.user_id == current_user.id,
+    ).first()
+
+    if not opportunity:
+        raise HTTPException(status_code=404, detail="Opportunity not found.")
+
+    return {
+        "opportunity": {
+            "id": opportunity.id,
+            "company_name": opportunity.company_name,
+            "job_title": opportunity.job_title,
+            "job_description": opportunity.job_description,
+            "status": opportunity.status,
+            "match_score": opportunity.match_score,
+            "match_result": json.loads(opportunity.match_result) if opportunity.match_result else None,
+            "tailored_resume": opportunity.tailored_resume,
+            "cover_letter": opportunity.cover_letter,
+            "application_pack": json.loads(opportunity.application_pack) if opportunity.application_pack else None,
+            "created_at": str(opportunity.created_at),
+            "updated_at": str(opportunity.updated_at or opportunity.created_at),
+        }
+    }
+
+
+@app.patch("/opportunities/{opportunity_id}/status")
+async def update_opportunity_status(
+    opportunity_id: int,
+    data: OpportunityStatusRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    allowed = {"saved", "analyzed", "tailored", "applied", "interview", "offer", "closed"}
+    new_status = data.status.strip().lower()
+    if new_status not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status. Use one of: {', '.join(sorted(allowed))}.",
+        )
+
+    opportunity = db.query(JobOpportunity).filter(
+        JobOpportunity.id == opportunity_id,
+        JobOpportunity.user_id == current_user.id,
+    ).first()
+
+    if not opportunity:
+        raise HTTPException(status_code=404, detail="Opportunity not found.")
+
+    opportunity.status = new_status
+    db.commit()
+    db.refresh(opportunity)
+
+    return {
+        "message": "Opportunity status updated.",
+        "opportunity": {
+            "id": opportunity.id,
+            "status": opportunity.status,
+            "updated_at": str(opportunity.updated_at or opportunity.created_at),
+        },
+    }
+
+
+
+@app.post("/opportunities/{opportunity_id}/prepare-application")
+async def prepare_application(
+    opportunity_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    opportunity = db.query(JobOpportunity).filter(
+        JobOpportunity.id == opportunity_id,
+        JobOpportunity.user_id == current_user.id,
+    ).first()
+
+    if not opportunity:
+        raise HTTPException(status_code=404, detail="Opportunity not found.")
+
+    resume = db.query(Resume).filter(
+        Resume.user_id == current_user.id,
+        Resume.is_active == True,
+    ).order_by(Resume.created_at.desc()).first()
+
+    if not resume:
+        raise HTTPException(status_code=400, detail="Upload a resume before preparing the application.")
+
+    try:
+        # Reuse previously saved assets when possible to avoid duplicate generation.
+        if opportunity.match_result:
+            match_result = json.loads(opportunity.match_result)
+        else:
+            match_result = match_job(resume.content, opportunity.job_description)
+
+        tailored_resume = opportunity.tailored_resume or rewrite_resume(
+            resume.content,
+            opportunity.job_title,
+        )
+
+        cover_letter = opportunity.cover_letter or generate_cover_letter(
+            resume.content,
+            opportunity.job_title,
+            opportunity.company_name,
+        )
+
+        existing_pack = json.loads(opportunity.application_pack) if opportunity.application_pack else None
+        interview_prep = (
+            existing_pack.get("interview_prep")
+            if isinstance(existing_pack, dict)
+            else None
+        )
+
+        if not interview_prep:
+            interview_prep = generate_application_prep(
+                resume.content,
+                opportunity.job_title,
+                opportunity.company_name,
+                opportunity.job_description,
+            )
+
+        application_pack = {
+            "match_result": match_result,
+            "tailored_resume": tailored_resume,
+            "cover_letter": cover_letter,
+            "interview_prep": interview_prep,
+            "prepared_for": {
+                "company_name": opportunity.company_name,
+                "job_title": opportunity.job_title,
+            },
+        }
+
+        opportunity.match_score = int(match_result.get("match_score", opportunity.match_score or 0))
+        opportunity.match_result = json.dumps(match_result)
+        opportunity.tailored_resume = tailored_resume
+        opportunity.cover_letter = cover_letter
+        opportunity.application_pack = json.dumps(application_pack)
+        opportunity.status = "tailored"
+
+        db.commit()
+        db.refresh(opportunity)
+
+        return {
+            "opportunity": {
+                "id": opportunity.id,
+                "status": opportunity.status,
+                "match_score": opportunity.match_score,
+                "match_result": match_result,
+                "tailored_resume": tailored_resume,
+                "cover_letter": cover_letter,
+                "application_pack": application_pack,
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        print(f"Application pack error: {exc}")
+        raise HTTPException(
+            status_code=502,
+            detail="Application preparation failed. Please try again.",
+        )
+
+
+@app.delete("/opportunities/{opportunity_id}")
+async def delete_opportunity(
+    opportunity_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    opportunity = db.query(JobOpportunity).filter(
+        JobOpportunity.id == opportunity_id,
+        JobOpportunity.user_id == current_user.id,
+    ).first()
+
+    if not opportunity:
+        raise HTTPException(status_code=404, detail="Opportunity not found.")
+
+    db.delete(opportunity)
+    db.commit()
+    return {"message": "Opportunity deleted."}
+
+
+
+@app.post("/opportunities/{opportunity_id}/match")
+async def match_opportunity(
+    opportunity_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    opportunity = db.query(JobOpportunity).filter(
+        JobOpportunity.id == opportunity_id,
+        JobOpportunity.user_id == current_user.id,
+    ).first()
+    if not opportunity:
+        raise HTTPException(status_code=404, detail="Opportunity not found.")
+
+    try:
+        resume = db.query(Resume).filter(
+            Resume.user_id == current_user.id,
+            Resume.is_active == True,
+        ).order_by(Resume.created_at.desc()).first()
+        if not resume:
+            raise HTTPException(status_code=400, detail="Upload a resume before matching this opportunity.")
+
+        result = match_job(resume.content, opportunity.job_description)
+        opportunity.match_score = int(result.get("match_score", 0))
+        opportunity.match_result = json.dumps(result)
+        opportunity.status = "analyzed"
+        db.commit()
+        db.refresh(opportunity)
+        return {"opportunity": {"id": opportunity.id, "status": opportunity.status, "match_score": opportunity.match_score, "match_result": result}}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        print(f"Opportunity match error: {exc}")
+        raise HTTPException(status_code=502, detail="Opportunity matching failed. Please try again.")
+
+
+@app.post("/opportunities/{opportunity_id}/tailor")
+async def tailor_opportunity(
+    opportunity_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    opportunity = db.query(JobOpportunity).filter(
+        JobOpportunity.id == opportunity_id,
+        JobOpportunity.user_id == current_user.id,
+    ).first()
+    if not opportunity:
+        raise HTTPException(status_code=404, detail="Opportunity not found.")
+
+    try:
+        resume = db.query(Resume).filter(
+            Resume.user_id == current_user.id,
+            Resume.is_active == True,
+        ).order_by(Resume.created_at.desc()).first()
+        if not resume:
+            raise HTTPException(status_code=400, detail="Upload a resume before tailoring it.")
+
+        tailored = rewrite_resume(resume.content, opportunity.job_title)
+        opportunity.tailored_resume = tailored
+        opportunity.status = "tailored"
+        db.commit()
+        db.refresh(opportunity)
+        return {"opportunity": {"id": opportunity.id, "status": opportunity.status, "tailored_resume": opportunity.tailored_resume}}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        print(f"Opportunity tailor error: {exc}")
+        raise HTTPException(status_code=502, detail="Resume tailoring failed. Please try again.")
+
+
+@app.post("/opportunities/{opportunity_id}/cover-letter")
+async def opportunity_cover_letter(
+    opportunity_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    opportunity = db.query(JobOpportunity).filter(
+        JobOpportunity.id == opportunity_id,
+        JobOpportunity.user_id == current_user.id,
+    ).first()
+    if not opportunity:
+        raise HTTPException(status_code=404, detail="Opportunity not found.")
+
+    try:
+        resume = db.query(Resume).filter(
+            Resume.user_id == current_user.id,
+            Resume.is_active == True,
+        ).order_by(Resume.created_at.desc()).first()
+        if not resume:
+            raise HTTPException(status_code=400, detail="Upload a resume before generating a cover letter.")
+
+        letter = generate_cover_letter(resume.content, opportunity.job_title, opportunity.company_name)
+        opportunity.cover_letter = letter
+        if opportunity.status == "saved":
+            opportunity.status = "analyzed"
+        db.commit()
+        db.refresh(opportunity)
+        return {"opportunity": {"id": opportunity.id, "status": opportunity.status, "cover_letter": opportunity.cover_letter}}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        print(f"Opportunity cover letter error: {exc}")
+        raise HTTPException(status_code=502, detail="Cover letter generation failed. Please try again.")
 
 @app.get("/history")
 async def get_history(
@@ -460,7 +904,7 @@ async def send_interview_report(
 ):
     try:
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"📋 Placement Assessment Report: {data.name} ({data.branch})"
+        msg["Subject"] = f"ðŸ“‹ Placement Assessment Report: {data.name} ({data.branch})"
         msg["From"] = GMAIL_USER
         msg["To"] = GMAIL_USER 
 
@@ -538,7 +982,7 @@ def google_login(data: GoogleLoginRequest, db: Session = Depends(get_db)):
                 db.commit()
                 db.refresh(user)
         except Exception as db_err:
-            print(f"DATABASE TRANSITION OPERATION CRASH -> {str(db_err)}")
+            print(f"DATABASE TRANSITION OPERATIONCRASH -> {str(db_err)}")
             raise HTTPException(status_code=500, detail=f"Database state synchronization failed: {str(db_err)}")
         
         token = create_token({"user_id": user.id})

@@ -1,0 +1,30 @@
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local database / temporary files
+*.db
+*.sqlite
+*.sqlite3
+temp.pdf
+
+# Node / React
+node_modules/
+frontend/build/
+frontend/.cache/
+
+# Logs
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

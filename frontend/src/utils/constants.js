@@ -5,9 +5,10 @@ export const PLANS = {
   free: {
     name: "Free",
     analysisLimit: 2,
-    canRewrite: false,
-    canInterview: false,
-    canDownloadPDF: false,
+    canRewrite: true,
+    canInterview: true,
+    canDownloadPDF: true,
+    canMatchJD: true,
   },
   pro: {
     name: "Pro",
