@@ -37,7 +37,7 @@ const NAV_ITEMS = [
   { id: "home", label: "Overview", icon: LayoutDashboard },
   { id: "analyze", label: "Analyze Resume", icon: BarChart3 },
   { id: "jd", label: "Job Match", icon: Target },
-  { id: "opportunities", label: "Opportunities", icon: BriefcaseBusiness },
+  { id: "opportunities", label: "Application Tracker", icon: BriefcaseBusiness },
   { id: "rewrite", label: "Rewrite", icon: PenLine },
   { id: "cover", label: "Cover Letter", icon: FileText },
   { id: "interview", label: "Interview", icon: MessageSquareText },
@@ -49,6 +49,17 @@ const loaderTexts = [
   "Analyzing core skills...",
   "Checking role alignment...",
   "Preparing your recommendations...",
+];
+
+/* RESUMEAI_KANBAN_V1 */
+const OPPORTUNITY_STAGES = [
+  { id: "saved", label: "Saved", hint: "New leads" },
+  { id: "analyzed", label: "Analyzed", hint: "Match checked" },
+  { id: "tailored", label: "Tailored", hint: "Application ready" },
+  { id: "applied", label: "Applied", hint: "Submitted" },
+  { id: "interview", label: "Interview", hint: "In process" },
+  { id: "offer", label: "Offer", hint: "Received" },
+  { id: "closed", label: "Closed", hint: "Archived" },
 ];
 
 const getScoreLabel = (score) => {
@@ -244,19 +255,90 @@ export default function Dashboard() {
     }
   };
 
-  const updateOpportunityStatus = async (status) => {
-    if (!selectedOpportunity?.id) return;
+  const updateOpportunityStatusById = async (opportunityId, status) => {
+    if (!opportunityId) return;
+
+    const previousItems = opportunities;
+    const previousSelected = selectedOpportunity;
+
     setOpportunityActionLoading(true);
+
+    // Optimistic UI: move immediately, then persist to the backend.
+    setOpportunities((prev) =>
+      prev.map((item) =>
+        item.id === opportunityId ? { ...item, status } : item
+      )
+    );
+
+    if (selectedOpportunity?.id === opportunityId) {
+      setSelectedOpportunity((prev) => (prev ? { ...prev, status } : prev));
+    }
+
     try {
-      const res = await api.patch(`/opportunities/${selectedOpportunity.id}/status`, { status });
-      setSelectedOpportunity((prev) => ({ ...prev, status: res.data.opportunity.status }));
-      await fetchOpportunities();
-      toast.success("Status updated");
+      const res = await api.patch(
+        `/opportunities/${opportunityId}/status`,
+        { status }
+      );
+
+      const updated = res.data.opportunity;
+
+      setOpportunities((prev) =>
+        prev.map((item) =>
+          item.id === opportunityId
+            ? {
+                ...item,
+                status: updated.status,
+                updated_at: updated.updated_at,
+              }
+            : item
+        )
+      );
+
+      if (selectedOpportunity?.id === opportunityId) {
+        setSelectedOpportunity((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: updated.status,
+                updated_at: updated.updated_at,
+              }
+            : prev
+        );
+      }
+
+      const label =
+        OPPORTUNITY_STAGES.find((stage) => stage.id === updated.status)?.label ||
+        updated.status;
+
+      toast.success(`Moved to ${label}`);
     } catch (err) {
+      // Restore the previous UI state if persistence fails.
+      setOpportunities(previousItems);
+      setSelectedOpportunity(previousSelected);
       toast.error(err.response?.data?.detail || "Could not update status");
     } finally {
       setOpportunityActionLoading(false);
     }
+  };
+
+  const updateOpportunityStatus = async (status) => {
+    if (!selectedOpportunity?.id) return;
+    await updateOpportunityStatusById(selectedOpportunity.id, status);
+  };
+
+  const handleKanbanDrop = async (event, status) => {
+    event.preventDefault();
+
+    const rawId = event.dataTransfer.getData("text/plain");
+    const opportunityId = Number(rawId);
+
+    if (!opportunityId) return;
+
+    const item = opportunities.find((entry) => entry.id === opportunityId);
+
+    if (!item || item.status === status) return;
+
+    await updateOpportunityStatusById(opportunityId, status);
   };
 
   const runOpportunityAction = async (action) => {
@@ -984,6 +1066,146 @@ export default function Dashboard() {
             <div className="form-footer"><span>{opportunityForm.job_description.length}/30,000 characters</span><button className="primary-button" onClick={createOpportunity} disabled={opportunityActionLoading}><Sparkles size={16} /> Save opportunity</button></div>
           </section>
         )}
+
+        <section className="da-card tracker-board-card">
+          <div className="tracker-board-header">
+            <div>
+              <div className="eyebrow">Application tracker</div>
+              <h3>Move every application through one clear pipeline.</h3>
+              <p>
+                Drag a job card to another stage. The change is saved to your account,
+                while the detailed application workspace stays below.
+              </p>
+            </div>
+
+            <div className="tracker-metrics">
+              <div>
+                <strong>{opportunities.length}</strong>
+                <span>Total</span>
+              </div>
+              <div>
+                <strong>
+                  {opportunities.filter((item) =>
+                    ["applied", "interview", "offer"].includes(item.status)
+                  ).length}
+                </strong>
+                <span>Active</span>
+              </div>
+              <div>
+                <strong>
+                  {opportunities.filter((item) => item.status === "interview").length}
+                </strong>
+                <span>Interviews</span>
+              </div>
+              <div>
+                <strong>
+                  {opportunities.filter((item) => item.status === "offer").length}
+                </strong>
+                <span>Offers</span>
+              </div>
+            </div>
+          </div>
+
+          {opportunityLoading ? (
+            <div className="empty-state tracker-loading">
+              <RefreshCw size={24} className="spin" />
+              <p>Loading your application pipeline...</p>
+            </div>
+          ) : (
+            <div className="kanban-board">
+              {OPPORTUNITY_STAGES.map((stage) => {
+                const items = opportunities.filter(
+                  (item) => item.status === stage.id
+                );
+
+                return (
+                  <div
+                    key={stage.id}
+                    className="kanban-column"
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => handleKanbanDrop(event, stage.id)}
+                  >
+                    <div className="kanban-column-header">
+                      <div>
+                        <strong>{stage.label}</strong>
+                        <span>{stage.hint}</span>
+                      </div>
+                      <span className="kanban-count">{items.length}</span>
+                    </div>
+
+                    <div className="kanban-column-body">
+                      {!items.length ? (
+                        <div className="kanban-empty">Drop applications here</div>
+                      ) : (
+                        items.map((item) => (
+                          <div
+                            key={item.id}
+                            className={`kanban-item ${
+                              selectedOpportunity?.id === item.id ? "selected" : ""
+                            }`}
+                            draggable
+                            role="button"
+                            tabIndex={0}
+                            title="Drag to change application stage"
+                            onDragStart={(event) => {
+                              event.dataTransfer.setData(
+                                "text/plain",
+                                String(item.id)
+                              );
+                              event.dataTransfer.effectAllowed = "move";
+                            }}
+                            onClick={() => openOpportunity(item.id)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                openOpportunity(item.id);
+                              }
+                            }}
+                          >
+                            <div className="kanban-item-top">
+                              <div className="kanban-company-mark">
+                                {(item.company_name || "C")
+                                  .charAt(0)
+                                  .toUpperCase()}
+                              </div>
+
+                              {item.match_score != null && (
+                                <span
+                                  className={`kanban-match ${getScoreTone(
+                                    item.match_score
+                                  )}`}
+                                >
+                                  {item.match_score}% match
+                                </span>
+                              )}
+                            </div>
+
+                            <strong className="kanban-title">
+                              {item.job_title}
+                            </strong>
+
+                            <span className="kanban-company">
+                              {item.company_name}
+                            </span>
+
+                            <div className="kanban-item-footer">
+                              <span>
+                                {new Date(
+                                  item.updated_at || item.created_at
+                                ).toLocaleDateString()}
+                              </span>
+                              <ChevronRight size={14} />
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
 
         <div className="opportunity-layout">
           <section className="da-card opportunity-list-card">
