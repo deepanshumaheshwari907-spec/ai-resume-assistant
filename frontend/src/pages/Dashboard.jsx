@@ -1031,6 +1031,50 @@ export default function Dashboard() {
     </div>
   );
 
+  const getOpportunityReadiness = (opportunity) => {
+    if (!opportunity) {
+      return {
+        percent: 0,
+        completed: 0,
+        total: 5,
+        next: "Select an opportunity",
+        steps: {},
+      };
+    }
+
+    const hasMatch = opportunity.match_score != null || Boolean(opportunity.match_result);
+    const hasTailored = Boolean(opportunity.tailored_resume);
+    const hasCover = Boolean(opportunity.cover_letter);
+    const hasInterview = Boolean(opportunity.application_pack?.interview_prep);
+    const isApplied = ["applied", "interview", "offer", "closed"].includes(opportunity.status);
+
+    const completed = [hasMatch, hasTailored, hasCover, hasInterview, isApplied]
+      .filter(Boolean).length;
+
+    let next = "Run job match";
+    if (!hasMatch) next = "Run job match";
+    else if (!hasTailored) next = "Tailor your resume";
+    else if (!hasCover) next = "Generate cover letter";
+    else if (!hasInterview) next = "Prepare interview";
+    else if (!isApplied) next = "Mark as applied";
+    else next = "Keep tracking this application";
+
+
+    return {
+      percent: completed * 20,
+      completed,
+      total: 5,
+      next,
+      steps: {
+        match: hasMatch,
+        tailored: hasTailored,
+        cover: hasCover,
+        interview: hasInterview,
+        applied: isApplied,
+      },
+    };
+  };
+
   const renderOpportunities = () => {
     const statusLabels = {
       saved: "Saved",
@@ -1254,6 +1298,130 @@ export default function Dashboard() {
                   <select value={selectedOpportunity.status} onChange={(e) => updateOpportunityStatus(e.target.value)} disabled={opportunityActionLoading} className="status-select">
                     {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                   </select>
+                </div>
+                {/* RESUMEAI_WORKSPACE_V2 */}
+                {(() => {
+                  const readiness = getOpportunityReadiness(selectedOpportunity);
+                  const steps = [
+                    {
+                      key: "match",
+                      label: "Job match",
+                      done: readiness.steps.match,
+                      action: () => runOpportunityAction("match"),
+                      button: "Run match",
+                    },
+                    {
+                      key: "tailored",
+                      label: "Tailored resume",
+                      done: readiness.steps.tailored,
+                      action: () => runOpportunityAction("tailor"),
+                      button: "Tailor resume",
+                    },
+                    {
+                      key: "cover",
+                      label: "Cover letter",
+                      done: readiness.steps.cover,
+                      action: () => runOpportunityAction("cover-letter"),
+                      button: "Create letter",
+                    },
+                    {
+                      key: "interview",
+                      label: "Interview prep",
+                      done: readiness.steps.interview,
+                      action: prepareApplication,
+                      button: "Prepare interview",
+                    },
+                    {
+                      key: "applied",
+                      label: "Application submitted",
+                      done: readiness.steps.applied,
+                      action: () => updateOpportunityStatus("applied"),
+                      button: "Mark applied",
+                    },
+                  ];
+
+                  const continueAction = !readiness.steps.match
+                    ? () => runOpportunityAction("match")
+                    : !readiness.steps.tailored
+                      ? () => runOpportunityAction("tailor")
+                      : !readiness.steps.cover
+                        ? () => runOpportunityAction("cover-letter")
+                        : !readiness.steps.interview
+                          ? prepareApplication
+                          : () => updateOpportunityStatus("applied");
+
+                  return (
+                    <div className="workspace-v2-panel">
+                      <div className="workspace-v2-top">
+                        <div>
+                          <div className="eyebrow">Application readiness</div>
+                          <h3>{readiness.percent}% workflow complete</h3>
+                          <p>Build a job-specific application in a clear step-by-step workflow.</p>
+                        </div>
+                        <div className="workspace-v2-percent">
+                          <strong>{readiness.percent}%</strong>
+                          <span>{readiness.completed}/{readiness.total} complete</span>
+                        </div>
+                      </div>
+
+                      <div className="workspace-v2-progress" aria-label={`Application readiness ${readiness.percent}%`}>
+                        <span style={{ width: `${readiness.percent}%` }} />
+                      </div>
+
+                      <div className="workspace-v2-next">
+                        <div>
+                          <span className="opp-label">Next recommended action</span>
+                          <strong>{readiness.next}</strong>
+                        </div>
+                        {!readiness.steps.applied && (
+                          <button
+                            className="primary-button small"
+                            onClick={continueAction}
+                            disabled={opportunityActionLoading || applicationPackLoading}
+                          >
+                            <ArrowRight size={15} /> Continue
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="workspace-v2-steps">
+                        {steps.map((step, index) => (
+                          <div
+                            key={step.key}
+                            className={`workspace-v2-step ${step.done ? "done" : ""}`}
+                          >
+                            <div className="workspace-v2-step-line">
+                              <div className="workspace-v2-step-icon">
+                                {step.done ? <CheckCircle2 size={15} /> : <span>{index + 1}</span>}
+                              </div>
+                              {index < steps.length - 1 && <div className="workspace-v2-connector" />}
+                            </div>
+
+                            <div className="workspace-v2-step-copy">
+                              <strong>{step.label}</strong>
+                              <span>{step.done ? "Completed" : "Not completed yet"}</span>
+                            </div>
+
+                            {!step.done && (
+                              <button
+                                className="secondary-button small workspace-v2-step-button"
+                                onClick={step.action}
+                                disabled={opportunityActionLoading || applicationPackLoading}
+                              >
+                                {step.button}
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+
+                <div className="workspace-v2-section-label">
+                  <span>Application controls</span>
+                  <small>Refresh individual assets below without rebuilding the whole application.</small>
                 </div>
 
                 <div className="opportunity-score-panel">

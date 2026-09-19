@@ -725,7 +725,9 @@ async def prepare_application(
         opportunity.tailored_resume = tailored_resume
         opportunity.cover_letter = cover_letter
         opportunity.application_pack = json.dumps(application_pack)
-        opportunity.status = "tailored"
+        # RESUMEAI_WORKSPACE_V2_HOTFIX: never move an application backwards in the pipeline.
+        if opportunity.status in {"saved", "analyzed"}:
+            opportunity.status = "tailored"
 
         db.commit()
         db.refresh(opportunity)
