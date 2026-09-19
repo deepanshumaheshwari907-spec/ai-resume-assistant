@@ -13,6 +13,7 @@ import json
 import os
 import re
 import random
+from datetime import datetime
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -117,6 +118,14 @@ class OpportunityCreateRequest(BaseModel):
 
 class OpportunityStatusRequest(BaseModel):
     status: str
+
+
+# RESUMEAI_APPLICATION_META_V1
+class OpportunityMetadataRequest(BaseModel):
+    application_deadline: datetime | None = None
+    follow_up_at: datetime | None = None
+    notes: str | None = None
+    source_url: str | None = None
 
 @app.get("/")
 def health_check():
@@ -576,6 +585,11 @@ async def list_opportunities(
                 "job_title": item.job_title,
                 "status": item.status,
                 "match_score": item.match_score,
+                "application_deadline": item.application_deadline.isoformat() if item.application_deadline else None,
+                "applied_at": item.applied_at.isoformat() if item.applied_at else None,
+                "follow_up_at": item.follow_up_at.isoformat() if item.follow_up_at else None,
+                "notes": item.notes,
+                "source_url": item.source_url,
                 "created_at": str(item.created_at),
                 "updated_at": str(item.updated_at or item.created_at),
             }
@@ -610,6 +624,11 @@ async def get_opportunity(
             "tailored_resume": opportunity.tailored_resume,
             "cover_letter": opportunity.cover_letter,
             "application_pack": json.loads(opportunity.application_pack) if opportunity.application_pack else None,
+            "application_deadline": opportunity.application_deadline.isoformat() if opportunity.application_deadline else None,
+            "applied_at": opportunity.applied_at.isoformat() if opportunity.applied_at else None,
+            "follow_up_at": opportunity.follow_up_at.isoformat() if opportunity.follow_up_at else None,
+            "notes": opportunity.notes,
+            "source_url": opportunity.source_url,
             "created_at": str(opportunity.created_at),
             "updated_at": str(opportunity.updated_at or opportunity.created_at),
         }
@@ -640,6 +659,12 @@ async def update_opportunity_status(
         raise HTTPException(status_code=404, detail="Opportunity not found.")
 
     opportunity.status = new_status
+
+    # RESUMEAI_APPLICATION_META_V1
+    # Record the first time the application reaches an application-stage status.
+    if new_status in {"applied", "interview", "offer"} and opportunity.applied_at is None:
+        opportunity.applied_at = datetime.utcnow()
+
     db.commit()
     db.refresh(opportunity)
 
@@ -652,6 +677,48 @@ async def update_opportunity_status(
         },
     }
 
+
+
+# RESUMEAI_APPLICATION_META_V1
+@app.patch("/opportunities/{opportunity_id}/metadata")
+async def update_opportunity_metadata(
+    opportunity_id: int,
+    data: OpportunityMetadataRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    opportunity = db.query(JobOpportunity).filter(
+        JobOpportunity.id == opportunity_id,
+        JobOpportunity.user_id == current_user.id,
+    ).first()
+
+    if not opportunity:
+        raise HTTPException(status_code=404, detail="Opportunity not found.")
+
+    if data.application_deadline is not None:
+        opportunity.application_deadline = data.application_deadline
+    if data.follow_up_at is not None:
+        opportunity.follow_up_at = data.follow_up_at
+    if data.notes is not None:
+        opportunity.notes = data.notes.strip()[:10000] or None
+    if data.source_url is not None:
+        opportunity.source_url = data.source_url.strip()[:2000] or None
+
+    db.commit()
+    db.refresh(opportunity)
+
+    return {
+        "message": "Application metadata updated.",
+        "opportunity": {
+            "id": opportunity.id,
+            "application_deadline": opportunity.application_deadline.isoformat() if opportunity.application_deadline else None,
+            "applied_at": opportunity.applied_at.isoformat() if opportunity.applied_at else None,
+            "follow_up_at": opportunity.follow_up_at.isoformat() if opportunity.follow_up_at else None,
+            "notes": opportunity.notes,
+            "source_url": opportunity.source_url,
+            "updated_at": str(opportunity.updated_at or opportunity.created_at),
+        },
+    }
 
 
 @app.post("/opportunities/{opportunity_id}/prepare-application")

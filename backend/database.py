@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
@@ -56,6 +56,14 @@ class JobOpportunity(Base):
     tailored_resume = Column(String, nullable=True)
     cover_letter = Column(String, nullable=True)
     application_pack = Column(String, nullable=True)
+
+    # RESUMEAI_APPLICATION_META_V1
+    application_deadline = Column(DateTime, nullable=True)
+    applied_at = Column(DateTime, nullable=True)
+    follow_up_at = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+    source_url = Column(String, nullable=True)
+
     status = Column(String, nullable=False, default="saved")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -94,3 +102,23 @@ def create_tables():
                 connection.execute(
                     text("ALTER TABLE job_opportunities ADD COLUMN application_pack TEXT")
                 )
+            columns.add("application_pack")
+
+        # RESUMEAI_APPLICATION_META_V1
+        migration_columns = {
+            "application_deadline": "DATETIME",
+            "applied_at": "DATETIME",
+            "follow_up_at": "DATETIME",
+            "notes": "TEXT",
+            "source_url": "TEXT",
+        }
+        for column_name, column_type in migration_columns.items():
+            if column_name not in columns:
+                with engine.begin() as connection:
+                    connection.execute(
+                        text(
+                            f"ALTER TABLE job_opportunities "
+                            f"ADD COLUMN {column_name} {column_type}"
+                        )
+                    )
+                columns.add(column_name)

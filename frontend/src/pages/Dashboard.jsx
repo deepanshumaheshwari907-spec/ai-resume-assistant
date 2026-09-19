@@ -109,6 +109,14 @@ export default function Dashboard() {
   const [showOpportunityForm, setShowOpportunityForm] = useState(false);
   const [opportunityForm, setOpportunityForm] = useState({ company_name: "", job_title: "", job_description: "" });
 
+  /* RESUMEAI_TRACKING_V1 */
+  const [trackingForm, setTrackingForm] = useState({
+    application_deadline: "",
+    follow_up_at: "",
+    notes: "",
+    source_url: "",
+  });
+
   const [showStudentPopup, setShowStudentPopup] = useState(false);
   const [studentDetails, setStudentDetails] = useState({ age: "", branch: "" });
   const [showChat, setShowChat] = useState(false);
@@ -208,7 +216,9 @@ export default function Dashboard() {
       setOpportunities(items);
       if (selectedOpportunity?.id) {
         const detailRes = await api.get(`/opportunities/${selectedOpportunity.id}`);
-        setSelectedOpportunity(detailRes.data.opportunity || null);
+        const refreshedOpportunity = detailRes.data.opportunity || null;
+        setSelectedOpportunity(refreshedOpportunity);
+        syncTrackingForm(refreshedOpportunity);
       }
     } catch (err) {
       console.error("Opportunity fetch failed:", err);
@@ -222,7 +232,9 @@ export default function Dashboard() {
     setOpportunityActionLoading(true);
     try {
       const res = await api.get(`/opportunities/${id}`);
-      setSelectedOpportunity(res.data.opportunity || null);
+      const opportunity = res.data.opportunity || null;
+      setSelectedOpportunity(opportunity);
+      syncTrackingForm(opportunity);
     } catch (err) {
       toast.error(err.response?.data?.detail || "Could not open opportunity");
     } finally {
@@ -1075,6 +1087,141 @@ export default function Dashboard() {
     };
   };
 
+  const formatTrackingDate = (value, includeTime = false) => {
+    if (!value) return "Not set";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Not set";
+
+    return new Intl.DateTimeFormat(undefined, {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      ...(includeTime ? { hour: "numeric", minute: "2-digit" } : {}),
+    }).format(date);
+  };
+
+  const getDeadlineState = (value) => {
+    if (!value) return { label: "No deadline", tone: "neutral" };
+
+    const deadline = new Date(value);
+    if (Number.isNaN(deadline.getTime())) {
+      return { label: "Invalid deadline", tone: "danger" };
+    }
+
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const deadlineStart = new Date(
+      deadline.getFullYear(),
+      deadline.getMonth(),
+      deadline.getDate()
+    );
+
+    const diffDays = Math.ceil((deadlineStart - todayStart) / 86400000);
+
+    if (diffDays < 0) return { label: "Overdue", tone: "danger" };
+    if (diffDays === 0) return { label: "Due today", tone: "danger" };
+    if (diffDays === 1) return { label: "Due tomorrow", tone: "warm" };
+
+    return {
+      label: `${diffDays} days left`,
+      tone: diffDays <= 3 ? "warm" : "neutral",
+    };
+  };
+
+  const getFollowUpState = (value) => {
+    if (!value) return { label: "No follow-up", tone: "neutral" };
+
+    const followUp = new Date(value);
+    if (Number.isNaN(followUp.getTime())) {
+      return { label: "Invalid follow-up", tone: "danger" };
+    }
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const followUpStart = new Date(
+      followUp.getFullYear(),
+      followUp.getMonth(),
+      followUp.getDate()
+    );
+
+    const diffDays = Math.ceil((followUpStart - todayStart) / 86400000);
+
+    if (diffDays < 0) return { label: "Follow-up overdue", tone: "danger" };
+    if (diffDays === 0) return { label: "Follow up today", tone: "danger" };
+    if (diffDays === 1) return { label: "Follow up tomorrow", tone: "warm" };
+
+    return {
+      label: `Follow up in ${diffDays} days`,
+      tone: diffDays <= 3 ? "warm" : "neutral",
+    };
+  };
+
+  const syncTrackingForm = (opportunity) => {
+    if (!opportunity) return;
+
+    setTrackingForm({
+      application_deadline: opportunity.application_deadline
+        ? opportunity.application_deadline.slice(0, 16)
+        : "",
+      follow_up_at: opportunity.follow_up_at
+        ? opportunity.follow_up_at.slice(0, 16)
+        : "",
+      notes: opportunity.notes || "",
+      source_url: opportunity.source_url || "",
+    });
+  };
+
+  const saveOpportunityMetadata = async () => {
+    if (!selectedOpportunity?.id) return;
+
+    setOpportunityActionLoading(true);
+
+    try {
+      const payload = {
+        application_deadline: trackingForm.application_deadline
+          ? new Date(trackingForm.application_deadline).toISOString()
+          : null,
+        follow_up_at: trackingForm.follow_up_at
+          ? new Date(trackingForm.follow_up_at).toISOString()
+          : null,
+        notes: trackingForm.notes || null,
+        source_url: trackingForm.source_url || null,
+      };
+
+      const res = await api.patch(
+        `/opportunities/${selectedOpportunity.id}/metadata`,
+        payload
+      );
+
+      const updated = res.data.opportunity || {};
+
+      const merged = {
+        ...selectedOpportunity,
+        ...updated,
+      };
+
+      setSelectedOpportunity(merged);
+      syncTrackingForm(merged);
+
+      setOpportunities((prev) =>
+        prev.map((item) =>
+          item.id === selectedOpportunity.id
+            ? { ...item, ...updated }
+            : item
+        )
+      );
+
+      toast.success("Application details saved");
+    } catch (err) {
+      toast.error(
+        err.response?.data?.detail || "Could not save application details"
+      );
+    } finally {
+      setOpportunityActionLoading(false);
+    }
+  };
+
   const renderOpportunities = () => {
     const statusLabels = {
       saved: "Saved",
@@ -1238,7 +1385,15 @@ export default function Dashboard() {
                                   item.updated_at || item.created_at
                                 ).toLocaleDateString()}
                               </span>
-                              <ChevronRight size={14} />
+                              {item.application_deadline ? (
+                                <span
+                                  className={`kanban-deadline ${getDeadlineState(item.application_deadline).tone}`}
+                                >
+                                  {getDeadlineState(item.application_deadline).label}
+                                </span>
+                              ) : (
+                                <ChevronRight size={14} />
+                              )}
                             </div>
                           </div>
                         ))
@@ -1418,6 +1573,146 @@ export default function Dashboard() {
                   );
                 })()}
 
+
+                <section className="tracking-v1-panel">
+                  <div className="tracking-v1-header">
+                    <div>
+                      <div className="eyebrow">Application details</div>
+                      <h3>Keep the important dates and context in one place.</h3>
+                      <p>
+                        Track the deadline, application date, next follow-up, source,
+                        and your private notes for this job.
+                      </p>
+                    </div>
+
+                    <div className="tracking-v1-status-stack">
+                      <span className={`tracking-status-badge ${getDeadlineState(selectedOpportunity.application_deadline).tone}`}>
+                        {getDeadlineState(selectedOpportunity.application_deadline).label}
+                      </span>
+                      <span className={`tracking-status-badge ${getFollowUpState(selectedOpportunity.follow_up_at).tone}`}>
+                        {getFollowUpState(selectedOpportunity.follow_up_at).label}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="tracking-v1-grid">
+                    <label className="tracking-field">
+                      <span>Application deadline</span>
+                      <input
+                        type="datetime-local"
+                        value={trackingForm.application_deadline}
+                        onChange={(event) =>
+                          setTrackingForm((prev) => ({
+                            ...prev,
+                            application_deadline: event.target.value,
+                          }))
+                        }
+                      />
+                      <small>
+                        {selectedOpportunity.application_deadline
+                          ? formatTrackingDate(selectedOpportunity.application_deadline, true)
+                          : "No deadline saved"}
+                      </small>
+                    </label>
+
+                    <label className="tracking-field">
+                      <span>Next follow-up</span>
+                      <input
+                        type="datetime-local"
+                        value={trackingForm.follow_up_at}
+                        onChange={(event) =>
+                          setTrackingForm((prev) => ({
+                            ...prev,
+                            follow_up_at: event.target.value,
+                          }))
+                        }
+                      />
+                      <small>
+                        {selectedOpportunity.follow_up_at
+                          ? formatTrackingDate(selectedOpportunity.follow_up_at, true)
+                          : "No follow-up scheduled"}
+                      </small>
+                    </label>
+
+                    <div className="tracking-readonly-card">
+                      <span>Applied on</span>
+                      <strong>
+                        {selectedOpportunity.applied_at
+                          ? formatTrackingDate(selectedOpportunity.applied_at)
+                          : "Not applied yet"}
+                      </strong>
+                      <small>
+                        Recorded automatically when the job reaches Applied,
+                        Interview, or Offer.
+                      </small>
+                    </div>
+
+                    <label className="tracking-field">
+                      <span>Application source</span>
+                      <input
+                        type="url"
+                        value={trackingForm.source_url}
+                        onChange={(event) =>
+                          setTrackingForm((prev) => ({
+                            ...prev,
+                            source_url: event.target.value,
+                          }))
+                        }
+                        placeholder="https://..."
+                      />
+                      <small>
+                        Save the original job posting or application link.
+                      </small>
+                    </label>
+
+                    <label className="tracking-field tracking-notes-field">
+                      <span>Private notes</span>
+                      <textarea
+                        value={trackingForm.notes}
+                        onChange={(event) =>
+                          setTrackingForm((prev) => ({
+                            ...prev,
+                            notes: event.target.value,
+                          }))
+                        }
+                        maxLength={10000}
+                        placeholder="Recruiter name, referral, follow-up context, questions to ask..."
+                      />
+                      <small>{trackingForm.notes.length}/10,000 characters</small>
+                    </label>
+                  </div>
+
+                  <div className="tracking-v1-footer">
+                    <div className="tracking-summary">
+                      {selectedOpportunity.application_deadline && (
+                        <span>
+                          Deadline: {formatTrackingDate(selectedOpportunity.application_deadline)}
+                        </span>
+                      )}
+                      {selectedOpportunity.follow_up_at && (
+                        <span>
+                          Follow-up: {formatTrackingDate(selectedOpportunity.follow_up_at)}
+                        </span>
+                      )}
+                    </div>
+
+                    <button
+                      className="primary-button small"
+                      onClick={saveOpportunityMetadata}
+                      disabled={opportunityActionLoading}
+                    >
+                      {opportunityActionLoading ? (
+                        <>
+                          <RefreshCw size={14} className="spin" /> Saving...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 size={14} /> Save details
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </section>
 
                 <div className="workspace-v2-section-label">
                   <span>Application controls</span>
