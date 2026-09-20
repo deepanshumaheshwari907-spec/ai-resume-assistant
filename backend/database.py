@@ -69,6 +69,19 @@ class JobOpportunity(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+# RESUMEAI_TIMELINE_V1
+class OpportunityActivity(Base):
+    __tablename__ = "opportunity_activities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    opportunity_id = Column(Integer, nullable=False, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    event_type = Column(String, nullable=False, index=True)
+    title = Column(String, nullable=False)
+    details = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class ResumeAnalysis(Base):
     __tablename__ = "resume_analyses"
 

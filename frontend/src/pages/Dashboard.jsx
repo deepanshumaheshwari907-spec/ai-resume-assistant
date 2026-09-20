@@ -117,6 +117,9 @@ export default function Dashboard() {
     source_url: "",
   });
 
+  const [activityData, setActivityData] = useState([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+
   const [showStudentPopup, setShowStudentPopup] = useState(false);
   const [studentDetails, setStudentDetails] = useState({ age: "", branch: "" });
   const [showChat, setShowChat] = useState(false);
@@ -219,12 +222,28 @@ export default function Dashboard() {
         const refreshedOpportunity = detailRes.data.opportunity || null;
         setSelectedOpportunity(refreshedOpportunity);
         syncTrackingForm(refreshedOpportunity);
+        await fetchOpportunityActivity(refreshedOpportunity?.id);
       }
     } catch (err) {
       console.error("Opportunity fetch failed:", err);
       toast.error(err.response?.data?.detail || "Could not load opportunities");
     } finally {
       setOpportunityLoading(false);
+    }
+  };
+
+  const fetchOpportunityActivity = async (id) => {
+    if (!id) return;
+    setActivityLoading(true);
+    try {
+      const res = await api.get(`/opportunities/${id}/activity`);
+      setActivityData(res.data.activities || []);
+    } catch (err) {
+      console.error("Opportunity activity fetch failed:", err);
+      setActivityData([]);
+      toast.error(err.response?.data?.detail || "Could not load application timeline");
+    } finally {
+      setActivityLoading(false);
     }
   };
 
@@ -235,6 +254,7 @@ export default function Dashboard() {
       const opportunity = res.data.opportunity || null;
       setSelectedOpportunity(opportunity);
       syncTrackingForm(opportunity);
+      await fetchOpportunityActivity(opportunity?.id);
     } catch (err) {
       toast.error(err.response?.data?.detail || "Could not open opportunity");
     } finally {
@@ -322,6 +342,7 @@ export default function Dashboard() {
         OPPORTUNITY_STAGES.find((stage) => stage.id === updated.status)?.label ||
         updated.status;
 
+      await fetchOpportunityActivity(opportunityId);
       toast.success(`Moved to ${label}`);
     } catch (err) {
       // Restore the previous UI state if persistence fails.
@@ -361,6 +382,7 @@ export default function Dashboard() {
       const updated = res.data.opportunity;
       setSelectedOpportunity((prev) => ({ ...prev, ...updated }));
       await fetchOpportunities();
+      await fetchOpportunityActivity(selectedOpportunity.id);
       toast.success(action === "match" ? "Opportunity matched" : action === "tailor" ? "Resume tailored" : "Cover letter generated");
     } catch (err) {
       toast.error(err.response?.data?.detail || "Opportunity action failed");
@@ -378,6 +400,7 @@ export default function Dashboard() {
       const updated = res.data.opportunity;
       setSelectedOpportunity((prev) => ({ ...prev, ...updated }));
       await fetchOpportunities();
+      await fetchOpportunityActivity(selectedOpportunity.id);
       toast.success("Application pack is ready");
     } catch (err) {
       toast.error(err.response?.data?.detail || "Could not prepare application");
@@ -1212,6 +1235,7 @@ export default function Dashboard() {
         )
       );
 
+      await fetchOpportunityActivity(selectedOpportunity.id);
       toast.success("Application details saved");
     } catch (err) {
       toast.error(
@@ -1219,6 +1243,18 @@ export default function Dashboard() {
       );
     } finally {
       setOpportunityActionLoading(false);
+    }
+  };
+
+  const getActivityIcon = (eventType) => {
+    switch (eventType) {
+      case "status": return <ArrowRight size={14} />;
+      case "match": return <Target size={14} />;
+      case "tailor": return <PenLine size={14} />;
+      case "cover": return <FileText size={14} />;
+      case "prepared": return <Sparkles size={14} />;
+      case "details": return <Clock3 size={14} />;
+      default: return <BriefcaseBusiness size={14} />;
     }
   };
 
@@ -1712,6 +1748,43 @@ export default function Dashboard() {
                       )}
                     </button>
                   </div>
+                </section>
+
+                <section className="timeline-v1-panel">
+                  <div className="timeline-v1-header">
+                    <div>
+                      <div className="eyebrow">Application timeline</div>
+                      <h3>Everything that happened on this application.</h3>
+                      <p>Key actions are recorded automatically so you can see the application journey at a glance.</p>
+                    </div>
+                    <span className="soft-badge">{activityData.length} events</span>
+                  </div>
+
+                  {activityLoading ? (
+                    <div className="timeline-empty"><RefreshCw size={18} className="spin" /><span>Loading timeline...</span></div>
+                  ) : !activityData.length ? (
+                    <div className="timeline-empty"><Clock3 size={18} /><span>No timeline events yet.</span></div>
+                  ) : (
+                    <div className="timeline-list">
+                      {activityData.map((activity, index) => (
+                        <div className="timeline-item" key={activity.id}>
+                          <div className="timeline-marker-wrap">
+                            <div className={`timeline-marker timeline-${activity.event_type}`}>
+                              {getActivityIcon(activity.event_type)}
+                            </div>
+                            {index < activityData.length - 1 && <div className="timeline-line" />}
+                          </div>
+                          <div className="timeline-item-content">
+                            <div className="timeline-item-topline">
+                              <strong>{activity.title}</strong>
+                              <span>{formatTrackingDate(activity.created_at, true)}</span>
+                            </div>
+                            {activity.details && <p>{activity.details}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </section>
 
                 <div className="workspace-v2-section-label">
