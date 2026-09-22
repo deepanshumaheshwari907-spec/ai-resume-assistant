@@ -82,14 +82,22 @@ def send_otp_email(target_email: str, otp_code: str):
         return False
 
 # RESUMEAI_TIMELINE_V1
-def record_opportunity_activity(db: Session, opportunity: JobOpportunity, event_type: str, title: str, details: str | None = None):
-    db.add(OpportunityActivity(
-        opportunity_id=opportunity.id,
-        user_id=opportunity.user_id,
-        event_type=event_type,
-        title=title,
-        details=(details or "").strip()[:5000] or None,
-    ))
+def record_opportunity_activity(
+    db: Session,
+    opportunity: JobOpportunity,
+    event_type: str,
+    title: str,
+    details: str | None = None,
+):
+    db.add(
+        OpportunityActivity(
+            opportunity_id=opportunity.id,
+            user_id=opportunity.user_id,
+            event_type=event_type,
+            title=title,
+            details=(details or "").strip()[:5000] or None,
+        )
+    )
 
 
 # Pydantic Schemas
@@ -560,10 +568,15 @@ async def create_opportunity(
     )
     db.add(opportunity)
     db.flush()
+
     record_opportunity_activity(
-        db, opportunity, "created", "Opportunity saved",
+        db,
+        opportunity,
+        "created",
+        "Opportunity saved",
         f"{opportunity.job_title} at {opportunity.company_name}",
     )
+
     db.commit()
     db.refresh(opportunity)
 
@@ -682,9 +695,12 @@ async def update_opportunity_status(
     if new_status in {"applied", "interview", "offer"} and opportunity.applied_at is None:
         opportunity.applied_at = datetime.utcnow()
 
+    # RESUMEAI_TIMELINE_V1
     if previous_status != new_status:
         record_opportunity_activity(
-            db, opportunity, "status",
+            db,
+            opportunity,
+            "status",
             f"Status moved to {new_status.title()}",
             f"{previous_status.title()} -> {new_status.title()}",
         )
@@ -720,6 +736,7 @@ async def update_opportunity_metadata(
         raise HTTPException(status_code=404, detail="Opportunity not found.")
 
     changed_fields = []
+
     if data.application_deadline is not None:
         opportunity.application_deadline = data.application_deadline
         changed_fields.append("deadline")
@@ -733,9 +750,13 @@ async def update_opportunity_metadata(
         opportunity.source_url = data.source_url.strip()[:2000] or None
         changed_fields.append("source")
 
+    # RESUMEAI_TIMELINE_V1
     if changed_fields:
         record_opportunity_activity(
-            db, opportunity, "details", "Application details updated",
+            db,
+            opportunity,
+            "details",
+            "Application details updated",
             "Updated: " + ", ".join(changed_fields),
         )
 
@@ -777,7 +798,10 @@ async def get_opportunity_activity(
             OpportunityActivity.opportunity_id == opportunity_id,
             OpportunityActivity.user_id == current_user.id,
         )
-        .order_by(OpportunityActivity.created_at.desc(), OpportunityActivity.id.desc())
+        .order_by(
+            OpportunityActivity.created_at.desc(),
+            OpportunityActivity.id.desc(),
+        )
         .limit(100)
         .all()
     )
@@ -793,6 +817,98 @@ async def get_opportunity_activity(
             }
             for item in activities
         ]
+    }
+
+
+# RESUMEAI_ANALYTICS_V1
+@app.get("/opportunities/analytics/summary")
+async def get_opportunity_analytics(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return tracker-level analytics derived from the user's opportunities."""
+    opportunities = (
+        db.query(JobOpportunity)
+        .filter(JobOpportunity.user_id == current_user.id)
+        .order_by(JobOpportunity.updated_at.desc(), JobOpportunity.id.desc())
+        .all()
+    )
+
+    stage_order = ["saved", "analyzed", "tailored", "applied", "interview", "offer", "closed"]
+    stage_counts = {stage: 0 for stage in stage_order}
+    for opportunity in opportunities:
+        stage = (opportunity.status or "saved").strip().lower()
+        if stage not in stage_counts:
+            stage_counts[stage] = 0
+        stage_counts[stage] += 1
+
+    total_opportunities = len(opportunities)
+    submitted = [
+        opportunity
+        for opportunity in opportunities
+        if opportunity.applied_at is not None
+        or (opportunity.status or "").strip().lower() in {"applied", "interview", "offer"}
+    ]
+    submitted_count = len(submitted)
+    interview_count = stage_counts.get("interview", 0)
+    offer_count = stage_counts.get("offer", 0)
+    response_count = interview_count + offer_count
+    response_rate = round((response_count / submitted_count) * 100, 1) if submitted_count else 0.0
+
+    scored = [
+        int(opportunity.match_score)
+        for opportunity in opportunities
+        if opportunity.match_score is not None
+    ]
+    average_match_score = round(sum(scored) / len(scored), 1) if scored else None
+
+    now = datetime.utcnow()
+    action_items = []
+
+    for opportunity in opportunities:
+        if opportunity.application_deadline:
+            delta_days = (opportunity.application_deadline - now).total_seconds() / 86400
+            action_items.append({
+                "type": "deadline",
+                "opportunity_id": opportunity.id,
+                "company_name": opportunity.company_name,
+                "job_title": opportunity.job_title,
+                "date": opportunity.application_deadline.isoformat(),
+                "days_delta": round(delta_days, 1),
+                "overdue": delta_days < 0,
+            })
+
+        if opportunity.follow_up_at:
+            delta_days = (opportunity.follow_up_at - now).total_seconds() / 86400
+            action_items.append({
+                "type": "follow_up",
+                "opportunity_id": opportunity.id,
+                "company_name": opportunity.company_name,
+                "job_title": opportunity.job_title,
+                "date": opportunity.follow_up_at.isoformat(),
+                "days_delta": round(delta_days, 1),
+                "overdue": delta_days < 0,
+            })
+
+    action_items.sort(
+        key=lambda item: (
+            0 if item["overdue"] else 1,
+            abs(item["days_delta"]) if item["overdue"] else item["days_delta"],
+        )
+    )
+
+    return {
+        "analytics": {
+            "total_opportunities": total_opportunities,
+            "submitted_count": submitted_count,
+            "interview_count": interview_count,
+            "offer_count": offer_count,
+            "response_count": response_count,
+            "response_rate": response_rate,
+            "average_match_score": average_match_score,
+            "stage_counts": stage_counts,
+            "upcoming_actions": action_items[:8],
+        }
     }
 
 
@@ -871,8 +987,12 @@ async def prepare_application(
         if opportunity.status in {"saved", "analyzed"}:
             opportunity.status = "tailored"
 
+        # RESUMEAI_TIMELINE_V1
         record_opportunity_activity(
-            db, opportunity, "prepared", "Application pack prepared",
+            db,
+            opportunity,
+            "prepared",
+            "Application pack prepared",
             "Application assets and interview preparation were saved.",
         )
 
@@ -916,9 +1036,10 @@ async def delete_opportunity(
         raise HTTPException(status_code=404, detail="Opportunity not found.")
 
     db.query(OpportunityActivity).filter(
-        OpportunityActivity.opportunity_id == opportunity.id,
+        OpportunityActivity.opportunity_id == opportunity_id,
         OpportunityActivity.user_id == current_user.id,
     ).delete(synchronize_session=False)
+
     db.delete(opportunity)
     db.commit()
     return {"message": "Opportunity deleted."}
@@ -950,10 +1071,16 @@ async def match_opportunity(
         opportunity.match_score = int(result.get("match_score", 0))
         opportunity.match_result = json.dumps(result)
         opportunity.status = "analyzed"
+
+        # RESUMEAI_TIMELINE_V1
         record_opportunity_activity(
-            db, opportunity, "match", "Job match analyzed",
+            db,
+            opportunity,
+            "match",
+            "Job match analyzed",
             f"Saved match score: {opportunity.match_score}%",
         )
+
         db.commit()
         db.refresh(opportunity)
         return {"opportunity": {"id": opportunity.id, "status": opportunity.status, "match_score": opportunity.match_score, "match_result": result}}
@@ -989,10 +1116,16 @@ async def tailor_opportunity(
         tailored = rewrite_resume(resume.content, opportunity.job_title)
         opportunity.tailored_resume = tailored
         opportunity.status = "tailored"
+
+        # RESUMEAI_TIMELINE_V1
         record_opportunity_activity(
-            db, opportunity, "tailor", "Resume tailored",
+            db,
+            opportunity,
+            "tailor",
+            "Resume tailored",
             "A role-specific resume draft was generated and saved.",
         )
+
         db.commit()
         db.refresh(opportunity)
         return {"opportunity": {"id": opportunity.id, "status": opportunity.status, "tailored_resume": opportunity.tailored_resume}}
@@ -1029,10 +1162,16 @@ async def opportunity_cover_letter(
         opportunity.cover_letter = letter
         if opportunity.status == "saved":
             opportunity.status = "analyzed"
+
+        # RESUMEAI_TIMELINE_V1
         record_opportunity_activity(
-            db, opportunity, "cover", "Cover letter generated",
+            db,
+            opportunity,
+            "cover",
+            "Cover letter generated",
             "A job-specific cover letter was generated and saved.",
         )
+
         db.commit()
         db.refresh(opportunity)
         return {"opportunity": {"id": opportunity.id, "status": opportunity.status, "cover_letter": opportunity.cover_letter}}

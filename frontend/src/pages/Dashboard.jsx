@@ -120,6 +120,10 @@ export default function Dashboard() {
   const [activityData, setActivityData] = useState([]);
   const [activityLoading, setActivityLoading] = useState(false);
 
+  /* RESUMEAI_ANALYTICS_V1 */
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
   const [showStudentPopup, setShowStudentPopup] = useState(false);
   const [studentDetails, setStudentDetails] = useState({ age: "", branch: "" });
   const [showChat, setShowChat] = useState(false);
@@ -147,7 +151,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (activeTab === "history") fetchHistory(false);
-    if (activeTab === "opportunities") fetchOpportunities();
+    if (activeTab === "opportunities") {
+      fetchOpportunities();
+      fetchOpportunityAnalytics();
+    }
   }, [activeTab]);
 
   const score = Number(result?.score ?? 0);
@@ -247,6 +254,20 @@ export default function Dashboard() {
     }
   };
 
+  /* RESUMEAI_ANALYTICS_V1 */
+  const fetchOpportunityAnalytics = async () => {
+    setAnalyticsLoading(true);
+    try {
+      const res = await api.get("/opportunities/analytics/summary");
+      setAnalyticsData(res.data.analytics || null);
+    } catch (err) {
+      console.error("Opportunity analytics fetch failed:", err);
+      setAnalyticsData(null);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
   const openOpportunity = async (id) => {
     setOpportunityActionLoading(true);
     try {
@@ -343,6 +364,7 @@ export default function Dashboard() {
         updated.status;
 
       await fetchOpportunityActivity(opportunityId);
+      await fetchOpportunityAnalytics();
       toast.success(`Moved to ${label}`);
     } catch (err) {
       // Restore the previous UI state if persistence fails.
@@ -383,6 +405,7 @@ export default function Dashboard() {
       setSelectedOpportunity((prev) => ({ ...prev, ...updated }));
       await fetchOpportunities();
       await fetchOpportunityActivity(selectedOpportunity.id);
+      await fetchOpportunityAnalytics();
       toast.success(action === "match" ? "Opportunity matched" : action === "tailor" ? "Resume tailored" : "Cover letter generated");
     } catch (err) {
       toast.error(err.response?.data?.detail || "Opportunity action failed");
@@ -401,6 +424,7 @@ export default function Dashboard() {
       setSelectedOpportunity((prev) => ({ ...prev, ...updated }));
       await fetchOpportunities();
       await fetchOpportunityActivity(selectedOpportunity.id);
+      await fetchOpportunityAnalytics();
       toast.success("Application pack is ready");
     } catch (err) {
       toast.error(err.response?.data?.detail || "Could not prepare application");
@@ -1236,6 +1260,7 @@ export default function Dashboard() {
       );
 
       await fetchOpportunityActivity(selectedOpportunity.id);
+      await fetchOpportunityAnalytics();
       toast.success("Application details saved");
     } catch (err) {
       toast.error(
@@ -1256,6 +1281,17 @@ export default function Dashboard() {
       case "details": return <Clock3 size={14} />;
       default: return <BriefcaseBusiness size={14} />;
     }
+  };
+
+  const formatAnalyticsAction = (item) => {
+    const delta = Number(item?.days_delta ?? 0);
+    if (item?.overdue) {
+      const days = Math.max(1, Math.ceil(Math.abs(delta)));
+      return `${days} day${days === 1 ? "" : "s"} overdue`;
+    }
+    if (delta <= 0.5) return "Due today";
+    const days = Math.ceil(delta);
+    return `Due in ${days} day${days === 1 ? "" : "s"}`;
   };
 
   const renderOpportunities = () => {
@@ -1293,6 +1329,121 @@ export default function Dashboard() {
             <div className="form-footer"><span>{opportunityForm.job_description.length}/30,000 characters</span><button className="primary-button" onClick={createOpportunity} disabled={opportunityActionLoading}><Sparkles size={16} /> Save opportunity</button></div>
           </section>
         )}
+
+        {/* RESUMEAI_ANALYTICS_V1 */}
+        <section className="da-card analytics-v1-panel">
+          <div className="analytics-v1-header">
+            <div>
+              <div className="eyebrow">Application intelligence</div>
+              <h3>See how your application pipeline is performing.</h3>
+              <p>Live metrics are calculated from the opportunities in your account.</p>
+            </div>
+            <button
+              className="secondary-button small"
+              onClick={fetchOpportunityAnalytics}
+              disabled={analyticsLoading}
+            >
+              <RefreshCw size={14} className={analyticsLoading ? "spin" : ""} />
+              {analyticsLoading ? "Refreshing..." : "Refresh"}
+            </button>
+          </div>
+
+          {analyticsLoading && !analyticsData ? (
+            <div className="analytics-v1-loading">
+              <RefreshCw size={18} className="spin" />
+              <span>Loading application insights...</span>
+            </div>
+          ) : (
+            <>
+              <div className="analytics-v1-grid">
+                <div className="analytics-stat">
+                  <span>Total applications</span>
+                  <strong>{analyticsData?.total_opportunities ?? 0}</strong>
+                </div>
+                <div className="analytics-stat">
+                  <span>Submitted</span>
+                  <strong>{analyticsData?.submitted_count ?? 0}</strong>
+                </div>
+                <div className="analytics-stat">
+                  <span>Interviews</span>
+                  <strong>{analyticsData?.interview_count ?? 0}</strong>
+                </div>
+                <div className="analytics-stat">
+                  <span>Offers</span>
+                  <strong>{analyticsData?.offer_count ?? 0}</strong>
+                </div>
+                <div className="analytics-stat">
+                  <span>Response rate</span>
+                  <strong>{Number(analyticsData?.response_rate ?? 0).toFixed(1)}%</strong>
+                </div>
+                <div className="analytics-stat">
+                  <span>Avg. match score</span>
+                  <strong>{analyticsData?.average_match_score != null ? `${analyticsData.average_match_score}%` : "—"}</strong>
+                </div>
+              </div>
+
+              <div className="analytics-v1-lower-grid">
+                <div className="analytics-v1-section">
+                  <div className="analytics-v1-section-heading">
+                    <span>Pipeline</span>
+                    <small>Current opportunities by stage</small>
+                  </div>
+                  <div className="analytics-pipeline-list">
+                    {OPPORTUNITY_STAGES.map((stage) => {
+                      const count = analyticsData?.stage_counts?.[stage.id] ?? 0;
+                      const total = analyticsData?.total_opportunities ?? 0;
+                      const width = total ? Math.max(4, Math.round((count / total) * 100)) : 0;
+                      return (
+                        <div className="analytics-pipeline-row" key={stage.id}>
+                          <div className="analytics-pipeline-label">
+                            <span>{stage.label}</span>
+                            <strong>{count}</strong>
+                          </div>
+                          <div className="analytics-pipeline-track">
+                            <span style={{ width: `${width}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="analytics-v1-section">
+                  <div className="analytics-v1-section-heading">
+                    <span>Upcoming actions</span>
+                    <small>Deadlines and follow-ups</small>
+                  </div>
+                  {!analyticsData?.upcoming_actions?.length ? (
+                    <div className="analytics-actions-empty">
+                      <CheckCircle2 size={16} />
+                      <span>No upcoming deadlines or follow-ups.</span>
+                    </div>
+                  ) : (
+                    <div className="analytics-actions-list">
+                      {analyticsData.upcoming_actions.slice(0, 5).map((item, index) => (
+                        <button
+                          type="button"
+                          className={`analytics-action-row ${item.overdue ? "overdue" : ""}`}
+                          key={`${item.type}-${item.opportunity_id}-${item.date}-${index}`}
+                          onClick={() => openOpportunity(item.opportunity_id)}
+                        >
+                          <div className="analytics-action-icon">
+                            {item.type === "deadline" ? <Clock3 size={14} /> : <Send size={14} />}
+                          </div>
+                          <div className="analytics-action-copy">
+                            <strong>{item.job_title}</strong>
+                            <span>{item.company_name} · {item.type === "deadline" ? "Deadline" : "Follow-up"}</span>
+                          </div>
+                          <small>{formatAnalyticsAction(item)}</small>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </section>
 
         <section className="da-card tracker-board-card">
           <div className="tracker-board-header">
