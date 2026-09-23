@@ -1,173 +1,257 @@
-# ResumeAI 🚀
+ResumeAI Frontend
 
-> **AI-Powered Resume Analyzer & Career Assistant**  
-> Get hired faster with AI that knows what recruiters want.
+React frontend for ResumeAI, an AI-powered career workspace for resume optimization, job matching, application preparation, and application tracking.
 
-🌐 **Live Demo:** [ai-resume-assistant-cyan.vercel.app](https://ai-resume-assistant-cyan.vercel.app)
+Current Product Scope
 
----
+The frontend currently provides UI for:
 
-## ✨ Features
+User signup, email OTP verification, and login
 
-| Feature | Description |
-|---------|-------------|
-| 🔍 **ATS Score Analysis** | Get your exact ATS score with detailed breakdown |
-| ✨ **AI Resume Rewrite** | AI rewrites your resume with power verbs & keywords |
-| 🎤 **Mock Interview Bot** | Practice with AI interviewer, get real feedback |
-| 🎯 **JD Match Score** | See how well your resume matches any job description |
-| 📝 **Cover Letter AI** | Generate personalized cover letters in seconds |
-| 📊 **Resume History** | Track your improvement over time |
-| 📄 **PDF Download** | Download ATS-friendly resume as PDF |
+Resume upload and saved resume analysis
 
----
+Deterministic ATS scoring with score breakdown
 
-## 🛠️ Tech Stack
+Resume history
 
-**Frontend:**
-- React.js
-- React Router DOM
-- Axios
-- jsPDF
-- Lucide React
-- React Hot Toast
+Job-description matching
 
-**Backend:**
-- FastAPI (Python)
-- SQLAlchemy
-- PostgreSQL (Supabase)
-- JWT Authentication
-- Groq AI (LLaMA 3)
-- pdfplumber
+AI resume rewriting
 
-**Deployment:**
-- Frontend → Vercel
-- Backend → Render
-- Database → Supabase
+Cover-letter generation
 
----
+Mock interview practice
 
-## 🚀 Getting Started
+Opportunity management
 
-### Prerequisites
-- Node.js 18+
-- Python 3.11+
-- Groq API Key ([console.groq.com](https://console.groq.com))
+Application metadata such as deadlines, applied dates, follow-ups, notes, and source URLs
 
-### Frontend Setup
+Application preparation
 
-```bash
+Application activity timeline
+
+Application analytics
+
+Kanban-style application tracking
+
+Application Pack PDF download
+
+The repository is currently in active development / pre-launch. Production deployment and several future capabilities are still in progress.
+
+Tech Stack
+
+Frontend
+
+React
+
+React Router
+
+Axios
+
+jsPDF
+
+Lucide React
+
+React Hot Toast
+
+Backend
+
+FastAPI
+
+Python
+
+SQLAlchemy
+
+SQLite
+
+JWT authentication
+
+Email OTP
+
+Gemini API by default
+
+OpenAI as an alternative AI provider
+
+pdfplumber
+
+Local Development
+
+Prerequisites
+
+Node.js
+
+npm
+
+Python 3
+
+A running ResumeAI backend
+
+Frontend Setup
+
+From the repository root:
+
 cd frontend
 npm install
-```
 
-Create `.env` file in `frontend/`:
-```
+Create a frontend environment file:
+
 REACT_APP_API_URL=http://127.0.0.1:8000
-```
 
-```bash
+Then start the development server:
+
 npm start
-```
 
-### Backend Setup
+The frontend is normally available at:
 
-```bash
+http://localhost:3000
+
+Backend
+
+Start the FastAPI backend separately from the backend directory:
+
 cd backend
-python -m venv venv
-venv\Scripts\activate  # Windows
+python -m venv .venv
+
+Windows:
+
+.venv\Scripts\activate
+
+Install dependencies:
+
 pip install -r requirements.txt
-```
 
-Create `.env` file in `backend/`:
-```
-GROQ_API_KEY=your_groq_api_key_here
-SECRET_KEY=your_secret_key_here
-DATABASE_URL=sqlite:///./resumeai.db
-```
+Create .env from backend/.env.example and configure the required provider/auth/email settings.
 
-```bash
+Run:
+
 uvicorn main:app --reload
-```
 
----
+Backend documentation:
 
-## 📁 Project Structure
+http://127.0.0.1:8000/docs
 
-```
-ai-resume-assistant/
-├── frontend/
-│   ├── src/
-│   │   ├── pages/
-│   │   │   ├── LandingPage.jsx
-│   │   │   ├── Dashboard.jsx
-│   │   │   ├── Login.jsx
-│   │   │   ├── Signup.jsx
-│   │   │   ├── Terms.jsx
-│   │   │   └── NotFound.jsx
-│   │   ├── context/
-│   │   │   └── AuthContext.jsx
-│   │   ├── utils/
-│   │   │   ├── api.js
-│   │   │   └── constants.js
-│   │   └── components/
-│   │       └── ProtectedRoute.jsx
-│   └── public/
-├── backend/
-│   ├── main.py
-│   ├── database.py
-│   ├── auth.py
-│   └── requirements.txt
+Frontend Structure
+
+frontend/
+├── public/
+├── src/
+│   ├── components/
+│   ├── context/
+│   ├── pages/
+│   ├── App.js
+│   ├── App.css
+│   ├── index.css
+│   └── index.js
+├── package.json
+├── package-lock.json
 └── README.md
-```
 
----
+Main Pages
 
-## 🔑 API Endpoints
+The current frontend includes:
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/auth/signup` | Create account |
-| POST | `/auth/login` | Login |
-| GET | `/auth/me` | Get current user |
-| POST | `/upload-resume` | Analyze resume |
-| POST | `/rewrite` | Rewrite resume |
-| POST | `/chat` | Mock interview |
-| POST | `/match-jd` | JD match score |
-| POST | `/cover-letter` | Generate cover letter |
-| GET | `/history` | Resume history |
+Landing page
 
----
+Login
 
-## 💰 Pricing
+Signup
 
-| Plan | Price | Features |
-|------|-------|---------|
-| Free | ₹0/month | 2 analyses/month, ATS Score |
-| Pro | ₹199/month | Unlimited + all features |
-| Elite | ₹499/month | Everything + LinkedIn optimization |
+Dashboard
 
----
+Terms
 
-## 🤝 Contributing
+Not Found
 
-Contributions are welcome! Feel free to open issues and pull requests.
+The authenticated dashboard contains the main resume and application-workspace flows.
 
----
+API Integration
 
-## 📄 License
+The frontend communicates with the FastAPI backend through the shared API client.
 
-MIT License — feel free to use this project.
+The API base URL is configurable with:
 
----
+REACT_APP_API_URL=http://127.0.0.1:8000
 
-## 👨‍💻 Built By
+When the environment variable is not set, the frontend uses the local backend URL.
 
-**Deepanshu Maheshwari**  
-AI & ML Engineering Student  
-📧 deepanshumaheshwari907@gmail.com  
-🔗 [LinkedIn](https://www.linkedin.com/in/deepanshu-maheshwari/)  
-🐙 [GitHub](https://github.com/deepanshumaheshwari907-spec)
+Authenticated requests use the JWT stored by the application's authentication context.
 
----
+Application Workspace
 
-⭐ **Star this repo if you found it helpful!**
+The dashboard is designed around a single workflow:
+
+Resume
+  ↓
+Analyze
+  ↓
+Match with Job
+  ↓
+Tailor Resume
+  ↓
+Generate Cover Letter
+  ↓
+Prepare Application
+  ↓
+Track Application
+  ↓
+Review Timeline & Analytics
+
+Application records can retain:
+
+Company
+
+Job title
+
+Job description
+
+Match score
+
+Deadline
+
+Applied date
+
+Follow-up date
+
+Notes
+
+Source URL
+
+Tailored resume
+
+Cover letter
+
+Application pack
+
+Engineering Notes
+
+The frontend intentionally treats deterministic backend scores as application data rather than attempting to recalculate ATS or JD-match scores in the browser.
+
+For changes to application workflows:
+
+Keep API contracts aligned with the FastAPI backend.
+
+Preserve authenticated request behavior.
+
+Refresh persisted opportunity state after mutations where required.
+
+Keep user-facing loading, success, and error states explicit.
+
+Verify the affected workflow locally before committing.
+
+Security
+
+Do not put API keys, application secrets, email credentials, or other backend secrets in the frontend.
+
+Frontend environment variables should contain only configuration that is safe to expose to the browser.
+
+Backend secrets belong in backend/.env and must never be committed.
+
+Current Scope vs Roadmap
+
+This README documents the currently implemented frontend scope.
+
+Future work may include additional deployment infrastructure, richer evaluation workflows, expanded interview preparation, onboarding improvements, and other product capabilities. Future items should not be treated as implemented until they are present in the codebase.
+
+License
+
+ResumeAI is distributed under the MIT License. See the repository root LICENSE file.
