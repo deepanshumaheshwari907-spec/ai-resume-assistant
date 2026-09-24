@@ -9,6 +9,7 @@ python-multipart
 python-dotenv
 pydantic
 psycopg2-binary==2.9.9
+google-genai
 requests
 google-auth
 google-auth-oauthlib
