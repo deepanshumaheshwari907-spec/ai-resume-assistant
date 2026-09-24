@@ -1,0 +1,39 @@
+:root {
+  --resume-paper-text: #151515;
+  --resume-paper-muted: #666;
+  --resume-paper-line: #dedede;
+  --resume-accent: #d97706;
+}
+.tailored-resume-preview-wrap { width: 100%; overflow-x: auto; padding: 4px 0 10px; }
+.tailored-resume-paper { width: min(100%, 820px); min-width: 640px; margin: 0 auto; background: #fff; color: var(--resume-paper-text); border: 1px solid rgba(0,0,0,.08); border-radius: 12px; padding: 42px 48px; box-shadow: 0 18px 44px rgba(0,0,0,.22); box-sizing: border-box; }
+.tailored-resume-header { padding-bottom: 18px; border-bottom: 2px solid var(--resume-accent); }
+.tailored-resume-header h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 30px; line-height: 1.15; letter-spacing: -.02em; }
+.tailored-resume-headline { margin: 7px 0 0; color: #333; font-size: 14px; font-weight: 600; }
+.tailored-resume-contact, .tailored-resume-location { margin: 8px 0 0; color: var(--resume-paper-muted); font-size: 11.5px; line-height: 1.55; }
+.tailored-resume-section { margin-top: 22px; }
+.tailored-resume-section h4 { margin: 0 0 10px; color: #111; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .09em; padding-bottom: 7px; border-bottom: 1px solid var(--resume-paper-line); }
+.tailored-resume-summary, .tailored-resume-detail, .tailored-resume-skill-row, .tailored-resume-entry { font-size: 12px; line-height: 1.6; }
+.tailored-resume-summary { margin: 0; color: #333; }
+.tailored-resume-skills { display: grid; gap: 7px; }
+.tailored-resume-skill-row { display: grid; grid-template-columns: 130px 1fr; gap: 14px; align-items: start; }
+.tailored-resume-skill-row strong { color: #202020; }
+.tailored-resume-skill-row span { color: #3f3f3f; }
+.tailored-resume-entry { margin-top: 14px; }
+.tailored-resume-entry:first-child { margin-top: 0; }
+.tailored-resume-entry-top { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; }
+.tailored-resume-entry-top strong { font-size: 12.5px; color: #161616; }
+.tailored-resume-entry-top span { color: #6b6b6b; font-size: 10.5px; white-space: nowrap; }
+.tailored-resume-tech { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 5px; color: #555; font-size: 10.5px; }
+.tailored-resume-tech span:first-child { font-weight: 700; color: #333; }
+.tailored-resume-bullets, .tailored-resume-simple-list { margin: 7px 0 0; padding-left: 18px; color: #303030; }
+.tailored-resume-bullets li, .tailored-resume-simple-list li { margin: 5px 0; padding-left: 2px; font-size: 11.5px; line-height: 1.55; }
+.tailored-resume-empty { padding: 22px; border: 1px dashed rgba(255,255,255,.14); border-radius: 10px; color: #777; }
+.section-header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 900px) {
+  .tailored-resume-paper { min-width: 0; padding: 30px 26px; }
+  .tailored-resume-entry-top { flex-direction: column; gap: 3px; }
+  .tailored-resume-entry-top span { white-space: normal; }
+  .tailored-resume-skill-row { grid-template-columns: 1fr; gap: 2px; }
+  .tailored-resume-header h2 { font-size: 26px; }
+  .section-header-actions { justify-content: flex-start; }
+}

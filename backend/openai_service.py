@@ -94,6 +94,48 @@ class ApplicationPrepResponse(BaseModel):
     talking_points: list[str] = Field(default_factory=list)
 
 
+class ResumeSkillGroup(BaseModel):
+    category: str = ""
+    skills: list[str] = Field(default_factory=list)
+
+
+class ResumeExperienceItem(BaseModel):
+    title: str = ""
+    company: str = ""
+    dates: str = ""
+    bullets: list[str] = Field(default_factory=list)
+
+
+class ResumeProjectItem(BaseModel):
+    name: str = ""
+    dates: str = ""
+    technologies: list[str] = Field(default_factory=list)
+    bullets: list[str] = Field(default_factory=list)
+
+
+class ResumeEducationItem(BaseModel):
+    degree: str = ""
+    institution: str = ""
+    dates: str = ""
+    details: list[str] = Field(default_factory=list)
+
+
+class TailoredResumeResponse(BaseModel):
+    format_version: int = 1
+    name: str = ""
+    headline: str = ""
+    contact_items: list[str] = Field(default_factory=list)
+    links: list[str] = Field(default_factory=list)
+    location: str = ""
+    summary: str = ""
+    skills: list[ResumeSkillGroup] = Field(default_factory=list)
+    experience: list[ResumeExperienceItem] = Field(default_factory=list)
+    projects: list[ResumeProjectItem] = Field(default_factory=list)
+    education: list[ResumeEducationItem] = Field(default_factory=list)
+    certifications: list[str] = Field(default_factory=list)
+    achievements: list[str] = Field(default_factory=list)
+
+
 def _gemini_structured(
     *,
     system: str,
@@ -366,6 +408,60 @@ Return only the rewritten resume text."""
         system=system,
         user=user,
         max_output_tokens=5000,
+    )
+
+
+def tailor_resume(
+    resume_text: str,
+    job_role: str,
+    job_description: str = "",
+) -> Dict[str, Any]:
+    system = """You are ResumeAI's structured resume tailoring engine.
+
+Transform the candidate's existing resume into a clean, professional,
+ATS-friendly resume data model for a specific target role.
+
+Rules:
+- Use ONLY facts explicitly present in the supplied resume.
+- Never invent employers, titles, dates, technologies, metrics, awards,
+  certifications, responsibilities, links, or achievements.
+- Do not convert a project into employment unless the resume explicitly
+  describes employment.
+- Preserve the candidate's name, contact details, links, education, and dates
+  exactly where available.
+- Improve wording and ordering for the target role, but never add claims.
+- Keep bullets concise and action-oriented.
+- Prioritize evidence relevant to the target role and job description.
+- Use empty strings/lists when information is unavailable.
+- Do not return markdown or commentary. Return JSON matching
+  TailoredResumeResponse.
+
+This output is a structured resume document. ResumeAI renders it separately
+as a professional resume preview and PDF.
+"""
+
+    user = f"""TARGET ROLE:
+{job_role}
+
+JOB DESCRIPTION:
+---BEGIN JOB DESCRIPTION---
+{job_description[:30000]}
+---END JOB DESCRIPTION---
+
+ORIGINAL RESUME:
+---BEGIN RESUME---
+{resume_text[:50000]}
+---END RESUME---
+
+Create the tailored resume data model.
+"""
+
+    return _structured(
+        system=system,
+        user=user,
+        schema_name="tailored_resume",
+        schema=TailoredResumeResponse,
+        model=GEMINI_MODEL if AI_PROVIDER == "gemini" else OPENAI_MODEL,
     )
 
 

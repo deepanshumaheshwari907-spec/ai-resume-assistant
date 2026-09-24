@@ -32,6 +32,10 @@ import {
   Trash2,
 } from "lucide-react";
 import "../styles/dashboard.css";
+import TailoredResumePreview, {
+  downloadTailoredResumePdf,
+  resumeToPlainText,
+} from "../components/TailoredResumePreview";
 
 const NAV_ITEMS = [
   { id: "home", label: "Overview", icon: LayoutDashboard },
@@ -81,7 +85,6 @@ export default function Dashboard() {
 
   const [file, setFile] = useState(null);
   const [storedResume, setStoredResume] = useState(null);
-  const [resumeLoading, setResumeLoading] = useState(true);
   const [jobRole, setJobRole] = useState("AI/ML Engineer");
   const [result, setResult] = useState(null);
   const [rewritten, setRewritten] = useState(null);
@@ -147,6 +150,8 @@ export default function Dashboard() {
   useEffect(() => {
     fetchLatestResume();
     fetchHistory(true);
+    // These functions intentionally remain component-local because they capture current UI state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -155,6 +160,8 @@ export default function Dashboard() {
       fetchOpportunities();
       fetchOpportunityAnalytics();
     }
+    // These functions intentionally remain component-local because they capture current UI state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const score = Number(result?.score ?? 0);
@@ -181,14 +188,11 @@ export default function Dashboard() {
   };
 
   const fetchLatestResume = async () => {
-    setResumeLoading(true);
     try {
       const res = await api.get("/resume/latest");
       setStoredResume(res.data.resume || null);
     } catch (err) {
       console.error("Latest resume fetch failed:", err);
-    } finally {
-      setResumeLoading(false);
     }
   };
 
@@ -521,7 +525,12 @@ export default function Dashboard() {
     }
 
     heading("TAILORED RESUME");
-    body(pack.tailored_resume || "No tailored resume was generated.", 10, 5.2);
+    body(
+      resumeToPlainText(pack.tailored_resume) ||
+        "No tailored resume was generated.",
+      10,
+      5.2
+    );
 
     heading("COVER LETTER");
     body(pack.cover_letter || "No cover letter was generated.", 10, 5.2);
@@ -2010,7 +2019,33 @@ export default function Dashboard() {
                 )}
 
                 {selectedOpportunity.tailored_resume && (
-                  <div className="opportunity-section"><div className="section-header"><div><div className="eyebrow">Tailored asset</div><h3>Resume draft ready</h3></div><span className="soft-badge">Saved</span></div><pre className="opportunity-document-preview">{selectedOpportunity.tailored_resume.slice(0, 2600)}{selectedOpportunity.tailored_resume.length > 2600 ? "\n\n…" : ""}</pre></div>
+                  <div className="opportunity-section tailored-resume-section">
+                    <div className="section-header">
+                      <div>
+                        <div className="eyebrow">Tailored asset</div>
+                        <h3>Professional resume ready</h3>
+                        <p>Structured for clean ATS-friendly presentation and PDF export.</p>
+                      </div>
+                      <div className="section-header-actions">
+                        <span className="soft-badge">Saved</span>
+                        <button
+                          className="secondary-button small"
+                          onClick={() =>
+                            downloadTailoredResumePdf(
+                              selectedOpportunity.tailored_resume,
+                              selectedOpportunity.job_title
+                            )
+                          }
+                        >
+                          <Download size={15} /> Download resume
+                        </button>
+                      </div>
+                    </div>
+                    <TailoredResumePreview
+                      value={selectedOpportunity.tailored_resume}
+                      targetRole={selectedOpportunity.job_title}
+                    />
+                  </div>
                 )}
 
                 {selectedOpportunity.cover_letter && (

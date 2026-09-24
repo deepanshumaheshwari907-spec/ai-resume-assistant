@@ -18,7 +18,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 #from dotenv import load_dotenv
-from openai_service import analyze_resume, rewrite_resume, match_job, generate_cover_letter, interview_turn, generate_application_prep
+from openai_service import analyze_resume, rewrite_resume, match_job, generate_cover_letter, interview_turn, generate_application_prep, tailor_resume
 
 # --- GOOGLE AUTH PACKAGES ---
 from google.oauth2 import id_token
@@ -941,9 +941,28 @@ async def prepare_application(
         else:
             match_result = match_job(resume.content, opportunity.job_description)
 
-        tailored_resume = opportunity.tailored_resume or rewrite_resume(
-            resume.content,
-            opportunity.job_title,
+        tailored_resume_model = None
+        if opportunity.tailored_resume:
+            try:
+                existing_tailored = json.loads(opportunity.tailored_resume)
+                if (
+                    isinstance(existing_tailored, dict)
+                    and existing_tailored.get("format_version") == 1
+                ):
+                    tailored_resume_model = existing_tailored
+            except (TypeError, ValueError):
+                tailored_resume_model = None
+
+        if tailored_resume_model is None:
+            tailored_resume_model = tailor_resume(
+                resume.content,
+                opportunity.job_title,
+                opportunity.job_description,
+            )
+
+        tailored_resume = json.dumps(
+            tailored_resume_model,
+            ensure_ascii=False,
         )
 
         cover_letter = opportunity.cover_letter or generate_cover_letter(
@@ -969,7 +988,7 @@ async def prepare_application(
 
         application_pack = {
             "match_result": match_result,
-            "tailored_resume": tailored_resume,
+            "tailored_resume": tailored_resume_model,
             "cover_letter": cover_letter,
             "interview_prep": interview_prep,
             "prepared_for": {
@@ -1113,8 +1132,15 @@ async def tailor_opportunity(
         if not resume:
             raise HTTPException(status_code=400, detail="Upload a resume before tailoring it.")
 
-        tailored = rewrite_resume(resume.content, opportunity.job_title)
-        opportunity.tailored_resume = tailored
+        tailored = tailor_resume(
+            resume.content,
+            opportunity.job_title,
+            opportunity.job_description,
+        )
+        opportunity.tailored_resume = json.dumps(
+            tailored,
+            ensure_ascii=False,
+        )
         opportunity.status = "tailored"
 
         # RESUMEAI_TIMELINE_V1

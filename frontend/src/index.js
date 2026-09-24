@@ -20,10 +20,16 @@ root.render(
 // or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
 reportWebVitals();
 
-// frontend/src/index.js ke sabse niche yehi check hona chahiye
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    // Path ko solid static route karo
-    navigator.serviceWorker.register('/service-worker.js');
+// ResumeAI deliberately does not keep a persistent service worker.
+// Remove any service worker installed by older deployments so stale assets
+// cannot trap the app on an outdated splash screen.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((registrations) => {
+        registrations.forEach((registration) => registration.unregister());
+      })
+      .catch(() => {});
   });
 }
