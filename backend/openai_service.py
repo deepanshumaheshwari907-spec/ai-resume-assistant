@@ -411,58 +411,534 @@ Return only the rewritten resume text."""
     )
 
 
+def _gemini_json(
+    *,
+    system: str,
+    user: str,
+    model: str | None = None,
+) -> Dict[str, Any]:
+    # Generate JSON with Gemini without prematurely rejecting flexible output.
+    from google.genai import types
+
+    response = _gemini_client.models.generate_content(
+        model=model or GEMINI_MODEL,
+        contents=user,
+        config=types.GenerateContentConfig(
+            system_instruction=system,
+            response_mime_type="application/json",
+            temperature=0.0,
+        ),
+    )
+
+    text = (response.text or "").strip()
+    if not text:
+        raise RuntimeError("Gemini returned an empty response")
+
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Gemini returned invalid JSON for tailored resume") from exc
+
+    if not isinstance(payload, dict):
+        raise RuntimeError("Gemini tailored resume output must be a JSON object")
+
+    return payload
+
+
+def _clean_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return re.sub(r"\s+", " ", value).strip()
+    if isinstance(value, (int, float, bool)):
+        return str(value).strip()
+    return ""
+
+
+def _string_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+
+    if isinstance(value, str):
+        cleaned = _clean_text(value)
+        return [cleaned] if cleaned else []
+
+    if isinstance(value, (int, float, bool)):
+        cleaned = _clean_text(value)
+        return [cleaned] if cleaned else []
+
+    if isinstance(value, list):
+        result: list[str] = []
+        for item in value:
+            result.extend(_string_list(item))
+        return result
+
+    if isinstance(value, dict):
+        preferred = (
+            "name", "title", "label", "skill", "skills", "value",
+            "text", "description", "detail", "details", "role",
+            "company", "institution", "degree", "technology",
+            "technologies", "issuer", "organization", "date", "dates",
+            "url",
+        )
+        result: list[str] = []
+        for key in preferred:
+            if key in value:
+                result.extend(_string_list(value[key]))
+        if result:
+            return result
+
+        for item in value.values():
+            result.extend(_string_list(item))
+        return result
+
+    return []
+
+
+def _title_case_key(value: Any) -> str:
+    text = _clean_text(value)
+    if not text:
+        return ""
+    return re.sub(
+        r"\s+",
+        " ",
+        text.replace("_", " ").replace("-", " "),
+    ).title()
+
+
+def _extract_resume_identity(resume_text: str) -> dict[str, list[str] | str]:
+    # Conservative fallback: only used when the model omits identity data.
+    lines = [
+        re.sub(r"\s+", " ", line).strip()
+        for line in resume_text.splitlines()
+        if line.strip()
+    ]
+
+    emails = re.findall(r"[\w.+-]+@[\w-]+\.[\w.-]+", resume_text)
+    phones = re.findall(
+        r"(?<!\d)(?:\+?\d[\d\s().-]{7,}\d)(?!\d)",
+        resume_text,
+    )
+    urls = re.findall(r"https?://[^\s<>()]+", resume_text, flags=re.IGNORECASE)
+
+    clean_emails = list(dict.fromkeys(
+        item.strip(".,;") for item in emails
+    ))
+    clean_phones = list(dict.fromkeys(
+        re.sub(r"\s+", " ", item).strip(" .,-")
+        for item in phones
+        if len(re.sub(r"\D", "", item)) >= 8
+    ))
+    clean_urls = list(dict.fromkeys(
+        item.rstrip(".,;)") for item in urls
+    ))
+
+    common_headings = {
+        "resume", "curriculum vitae", "cv", "profile", "summary",
+        "skills", "experience", "projects", "education",
+        "certifications", "achievements", "objective",
+    }
+
+    name = ""
+    for line in lines[:10]:
+        lower = line.lower().strip(": ")
+        if lower in common_headings:
+            continue
+        if "@" in line or "http://" in lower or "https://" in lower:
+            continue
+        if re.search(r"\d{2,}", line):
+            continue
+        if ":" in line:
+            continue
+        words = line.split()
+        if 2 <= len(words) <= 5 and 3 <= len(line) <= 60:
+            if re.fullmatch(r"[A-Za-z][A-Za-z .'-]+", line):
+                name = line
+                break
+
+    return {
+        "name": name,
+        "contact_items": list(dict.fromkeys(clean_emails + clean_phones)),
+        "links": clean_urls,
+    }
+
+
+def _normalize_skills(raw: Any) -> list[dict[str, Any]]:
+    groups: list[dict[str, Any]] = []
+
+    def add_group(category: str, skills: Any) -> None:
+        cleaned: list[str] = []
+        for item in _string_list(skills):
+            parts = [
+                part.strip()
+                for part in re.split(r"\s*[|,;]\s*", item)
+                if part.strip()
+            ]
+            cleaned.extend(parts or [item])
+
+        cleaned = list(dict.fromkeys(cleaned))
+        if cleaned:
+            groups.append({
+                "category": category or "Skills",
+                "skills": cleaned,
+            })
+
+    if isinstance(raw, dict):
+        if "category" in raw or "skills" in raw:
+            add_group(
+                _clean_text(raw.get("category")) or "Skills",
+                raw.get("skills", []),
+            )
+            for key, value in raw.items():
+                if key not in {"category", "skills"}:
+                    add_group(_title_case_key(key), value)
+        else:
+            for key, value in raw.items():
+                add_group(_title_case_key(key) or "Skills", value)
+
+    elif isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict):
+                if "category" in item or "skills" in item:
+                    add_group(
+                        _clean_text(item.get("category")) or "Skills",
+                        item.get("skills", []),
+                    )
+                    for key, value in item.items():
+                        if key not in {"category", "skills"}:
+                            add_group(_title_case_key(key), value)
+                else:
+                    for key, value in item.items():
+                        add_group(_title_case_key(key), value)
+            else:
+                add_group("Skills", item)
+
+    merged: list[dict[str, Any]] = []
+    index_by_category: dict[str, int] = {}
+    for group in groups:
+        key = group["category"].lower()
+        if key not in index_by_category:
+            index_by_category[key] = len(merged)
+            merged.append({
+                "category": group["category"],
+                "skills": list(group["skills"]),
+            })
+        else:
+            existing = merged[index_by_category[key]]["skills"]
+            existing.extend(
+                item for item in group["skills"] if item not in existing
+            )
+
+    return merged
+
+
+def _normalize_experience(raw: Any) -> list[dict[str, Any]]:
+    items = raw if isinstance(raw, list) else ([raw] if raw else [])
+    normalized = []
+
+    for item in items:
+        if isinstance(item, str):
+            title = _clean_text(item)
+            company = ""
+            dates = ""
+            bullets: list[str] = []
+        elif isinstance(item, dict):
+            title = _clean_text(
+                item.get("title")
+                or item.get("role")
+                or item.get("job_title")
+                or item.get("position")
+                or item.get("name")
+            )
+            company = _clean_text(
+                item.get("company")
+                or item.get("employer")
+                or item.get("organization")
+            )
+            dates = _clean_text(
+                item.get("dates")
+                or item.get("date")
+                or item.get("period")
+            )
+            bullets = _string_list(
+                item.get("bullets")
+                or item.get("responsibilities")
+                or item.get("achievements")
+                or item.get("description")
+            )
+        else:
+            continue
+
+        combined = " ".join([title, company, *bullets]).lower()
+        if (
+            title.lower() == "untitled"
+            or "no formal work experience listed" in combined
+            or "projects demonstrate practical engineering experience" in combined
+        ):
+            continue
+
+        if title or company or bullets:
+            normalized.append({
+                "title": title,
+                "company": company,
+                "dates": dates,
+                "bullets": bullets,
+            })
+
+    return normalized
+
+
+def _normalize_projects(raw: Any) -> list[dict[str, Any]]:
+    items = raw if isinstance(raw, list) else ([raw] if raw else [])
+    normalized = []
+
+    for item in items:
+        if isinstance(item, str):
+            name = _clean_text(item)
+            dates = ""
+            technologies = []
+            bullets = []
+        elif isinstance(item, dict):
+            name = _clean_text(
+                item.get("name")
+                or item.get("title")
+                or item.get("project")
+            )
+            dates = _clean_text(
+                item.get("dates")
+                or item.get("date")
+                or item.get("period")
+            )
+            technologies = _string_list(
+                item.get("technologies")
+                or item.get("technology")
+                or item.get("tech_stack")
+                or item.get("stack")
+            )
+            bullets = _string_list(
+                item.get("bullets")
+                or item.get("highlights")
+                or item.get("description")
+            )
+        else:
+            continue
+
+        normalized.append({
+            "name": name,
+            "dates": dates,
+            "technologies": list(dict.fromkeys(technologies)),
+            "bullets": bullets,
+        })
+
+    return [
+        item for item in normalized
+        if item["name"] or item["bullets"]
+    ]
+
+
+def _normalize_education(raw: Any) -> list[dict[str, Any]]:
+    items = raw if isinstance(raw, list) else ([raw] if raw else [])
+    normalized = []
+
+    for item in items:
+        if not isinstance(item, dict):
+            text = _clean_text(item)
+            if text:
+                normalized.append({
+                    "degree": text,
+                    "institution": "",
+                    "dates": "",
+                    "details": [],
+                })
+            continue
+
+        degree = _clean_text(
+            item.get("degree")
+            or item.get("qualification")
+            or item.get("program")
+            or item.get("name")
+            or item.get("title")
+        )
+        institution = _clean_text(
+            item.get("institution")
+            or item.get("university")
+            or item.get("college")
+            or item.get("school")
+        )
+        dates = _clean_text(
+            item.get("dates")
+            or item.get("date")
+            or item.get("period")
+        )
+
+        details_raw = item.get("details", [])
+        if isinstance(details_raw, dict):
+            details: list[str] = []
+            for key, value in details_raw.items():
+                values = _string_list(value)
+                label = _title_case_key(key)
+                for value_text in values:
+                    details.append(
+                        f"{label}: {value_text}" if label else value_text
+                    )
+        else:
+            details = _string_list(details_raw)
+
+        normalized.append({
+            "degree": degree,
+            "institution": institution,
+            "dates": dates,
+            "details": list(dict.fromkeys(details)),
+        })
+
+    return [
+        item for item in normalized
+        if item["degree"] or item["institution"] or item["details"]
+    ]
+
+
+def _format_document_item(item: Any) -> str:
+    if isinstance(item, str):
+        return _clean_text(item)
+
+    if isinstance(item, dict):
+        name = _clean_text(
+            item.get("name")
+            or item.get("title")
+            or item.get("certification")
+            or item.get("achievement")
+            or item.get("label")
+        )
+        issuer = _clean_text(
+            item.get("issuer")
+            or item.get("organization")
+            or item.get("company")
+            or item.get("provider")
+        )
+        date = _clean_text(
+            item.get("date")
+            or item.get("dates")
+            or item.get("issued")
+            or item.get("year")
+        )
+        url = _clean_text(item.get("url") or item.get("link"))
+
+        parts = [part for part in (name, issuer, date, url) if part]
+        return " — ".join(parts)
+
+    return _clean_text(item)
+
+
+def _normalize_document_items(raw: Any) -> list[str]:
+    items = raw if isinstance(raw, list) else ([raw] if raw else [])
+    result = []
+    for item in items:
+        formatted = _format_document_item(item)
+        if formatted:
+            result.append(formatted)
+    return list(dict.fromkeys(result))
+
+
+def _normalize_tailored_resume_payload(
+    payload: dict[str, Any],
+    resume_text: str,
+) -> Dict[str, Any]:
+    # Convert Gemini's flexible JSON into ResumeAI's canonical schema.
+    source = payload if isinstance(payload, dict) else {}
+    identity = _extract_resume_identity(resume_text)
+
+    name = _clean_text(source.get("name")) or identity["name"]
+    contact_items = _string_list(source.get("contact_items"))
+    links = _string_list(source.get("links"))
+
+    if not contact_items:
+        contact_items = list(identity["contact_items"])
+    if not links:
+        links = list(identity["links"])
+
+    contact_items = list(dict.fromkeys(contact_items))
+    links = list(dict.fromkeys(
+        item for item in links if item not in contact_items
+    ))
+
+    normalized = {
+        "format_version": 1,
+        "name": name,
+        "headline": _clean_text(source.get("headline")),
+        "contact_items": contact_items,
+        "links": links,
+        "location": _clean_text(source.get("location")),
+        "summary": _clean_text(source.get("summary")),
+        "skills": _normalize_skills(source.get("skills", [])),
+        "experience": _normalize_experience(source.get("experience", [])),
+        "projects": _normalize_projects(source.get("projects", [])),
+        "education": _normalize_education(source.get("education", [])),
+        "certifications": _normalize_document_items(
+            source.get("certifications", [])
+        ),
+        "achievements": _normalize_document_items(
+            source.get("achievements", [])
+        ),
+    }
+
+    return TailoredResumeResponse.model_validate(normalized).model_dump()
+
+
 def tailor_resume(
     resume_text: str,
     job_role: str,
     job_description: str = "",
 ) -> Dict[str, Any]:
-    system = """You are ResumeAI's structured resume tailoring engine.
-
-Transform the candidate's existing resume into a clean, professional,
-ATS-friendly resume data model for a specific target role.
-
-Rules:
-- Use ONLY facts explicitly present in the supplied resume.
-- Never invent employers, titles, dates, technologies, metrics, awards,
-  certifications, responsibilities, links, or achievements.
-- Do not convert a project into employment unless the resume explicitly
-  describes employment.
-- Preserve the candidate's name, contact details, links, education, and dates
-  exactly where available.
-- Improve wording and ordering for the target role, but never add claims.
-- Keep bullets concise and action-oriented.
-- Prioritize evidence relevant to the target role and job description.
-- Use empty strings/lists when information is unavailable.
-- Do not return markdown or commentary. Return JSON matching
-  TailoredResumeResponse.
-
-This output is a structured resume document. ResumeAI renders it separately
-as a professional resume preview and PDF.
-"""
-
-    user = f"""TARGET ROLE:
-{job_role}
-
-JOB DESCRIPTION:
----BEGIN JOB DESCRIPTION---
-{job_description[:30000]}
----END JOB DESCRIPTION---
-
-ORIGINAL RESUME:
----BEGIN RESUME---
-{resume_text[:50000]}
----END RESUME---
-
-Create the tailored resume data model.
-"""
-
-    return _structured(
-        system=system,
-        user=user,
-        schema_name="tailored_resume",
-        schema=TailoredResumeResponse,
-        model=GEMINI_MODEL if AI_PROVIDER == "gemini" else OPENAI_MODEL,
+    system = (
+        "You are ResumeAI's structured resume tailoring engine.\n\n"
+        "Transform the candidate's existing resume into a clean, professional, "
+        "ATS-friendly resume data model for a specific target role.\n\n"
+        "STRICT FACTUAL RULES:\n"
+        "- Use ONLY facts explicitly present in the supplied resume.\n"
+        "- Never invent employers, titles, dates, technologies, metrics, awards, "
+        "certifications, responsibilities, links, or achievements.\n"
+        "- Do not convert a project into employment unless the resume explicitly "
+        "describes employment.\n"
+        "- Preserve the candidate's name, contact details, links, education, and "
+        "dates where present.\n"
+        "- Improve wording and ordering for the target role, but never add claims.\n"
+        "- Keep bullets concise and action-oriented.\n"
+        "- If formal work experience is absent, return an EMPTY experience array.\n"
+        "- Never create an 'Untitled' experience item or a note explaining that "
+        "no formal experience exists.\n"
+        "- Certifications and education details must be human-readable strings.\n"
+        "- Skills must be grouped as category + skills array.\n"
+        "- Return JSON only. No markdown. No commentary.\n\n"
+        "Return a JSON object with these keys: format_version, name, headline, "
+        "contact_items, links, location, summary, skills, experience, projects, "
+        "education, certifications, achievements."
     )
+
+    user = (
+        "TARGET ROLE:\n" + job_role + "\n\n"
+        "JOB DESCRIPTION:\n---BEGIN JOB DESCRIPTION---\n"
+        + job_description[:30000] + "\n---END JOB DESCRIPTION---\n\n"
+        "ORIGINAL RESUME:\n---BEGIN RESUME---\n"
+        + resume_text[:50000] + "\n---END RESUME---\n\n"
+        "Create the tailored resume JSON.\n"
+    )
+
+    if AI_PROVIDER == "gemini":
+        raw_payload = _gemini_json(
+            system=system,
+            user=user,
+            model=GEMINI_MODEL,
+        )
+    else:
+        raw_payload = _openai_structured(
+            system=system,
+            user=user,
+            schema_name="tailored_resume",
+            schema=TailoredResumeResponse,
+            model=OPENAI_MODEL,
+        )
+
+    return _normalize_tailored_resume_payload(raw_payload, resume_text)
 
 
 def generate_cover_letter(
