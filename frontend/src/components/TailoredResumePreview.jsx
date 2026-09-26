@@ -140,33 +140,348 @@ export default function TailoredResumePreview({ value, targetRole }) {
   </article></div>;
 }
 
+// RESUMEAI_PDF_V2
 function addPdfText(doc, text, x, y, width, options = {}) {
-  const { size = 9.6, bold = false, lineHeight = 4.7, color = [32, 32, 32], after = 1.2 } = options;
-  const value = normalize(text); if (!value) return y;
-  doc.setFont("Helvetica", bold ? "bold" : "normal"); doc.setFontSize(size); doc.setTextColor(...color);
-  const lines = doc.splitTextToSize(value, width); if (!lines.length) return y;
-  doc.text(lines, x, y); return y + lines.length * lineHeight + after;
+  const {
+    size = 9.0,
+    bold = false,
+    lineHeight = 4.15,
+    color = [36, 36, 36],
+    after = 0.7,
+  } = options;
+
+  const value = normalize(text);
+  if (!value) return y;
+
+  doc.setFont("Helvetica", bold ? "bold" : "normal");
+  doc.setFontSize(size);
+  doc.setTextColor(...color);
+
+  const lines = doc.splitTextToSize(value, width);
+  if (!lines.length) return y;
+
+  doc.text(lines, x, y);
+  return y + lines.length * lineHeight + after;
 }
-function ensurePdfSpace(doc, y, needed = 12) { if (y + needed <= 279) return y; doc.addPage(); return 18; }
 
 export function downloadTailoredResumePdf(value, targetRole = "Tailored Resume") {
-  const model = parseTailoredResume(value) || parseLegacyResume(value); if (!model) return;
-  const doc = new jsPDF({ unit: "mm", format: "a4" }); const margin = 18; const contentWidth = 210 - margin * 2; let y = 20;
-  doc.setProperties({ title: model.name ? model.name + " — Resume" : "ResumeAI Tailored Resume", subject: targetRole });
-  doc.setFont("Helvetica", "bold"); doc.setFontSize(21); doc.setTextColor(24,24,24); doc.text(model.name || "Tailored Resume", margin, y); y += 7;
-  const headline = model.headline || (targetRole ? "Tailored for " + targetRole : ""); if (headline) y = addPdfText(doc, headline, margin, y, contentWidth, {size:10.5,color:[92,92,92],after:2});
-  const contacts = [...(model.contact_items || []), ...(model.links || [])].map(normalize).filter(Boolean); if (contacts.length) y = addPdfText(doc, contacts.join(" • "), margin, y, contentWidth, {size:8.7,color:[86,86,86],after:1});
-  if (model.location) y = addPdfText(doc, model.location, margin, y, contentWidth, {size:8.7,color:[86,86,86],after:2});
-  doc.setDrawColor(245,158,11); doc.setLineWidth(0.7); doc.line(margin,y,210-margin,y); y += 8;
-  const sectionTitle = (title) => { y=ensurePdfSpace(doc,y,12); doc.setFont("Helvetica","bold"); doc.setFontSize(11); doc.setTextColor(24,24,24); doc.text(title.toUpperCase(),margin,y); y+=5.5; doc.setDrawColor(225,225,225); doc.setLineWidth(0.25); doc.line(margin,y-2,210-margin,y-2); y+=1.5; };
-  const bullet = (textValue) => { y=ensurePdfSpace(doc,y,8); const value=normalize(textValue); if(!value)return; doc.setFont("Helvetica","normal"); doc.setFontSize(9.5); doc.setTextColor(42,42,42); const lines=doc.splitTextToSize(value,contentWidth-6); if(!lines.length)return; doc.text("•",margin,y); doc.text(lines,margin+4.5,y); y+=lines.length*4.6+1.2; };
-  if(model.summary){sectionTitle("Summary");y=addPdfText(doc,model.summary,margin,y,contentWidth,{size:9.6,color:[42,42,42],after:2});}
-  if(model.skills?.length){sectionTitle("Skills");model.skills.forEach((group)=>{y=addPdfText(doc,group.category+": "+(group.skills||[]).join(", "),margin,y,contentWidth,{size:9.3,after:1.5});});y+=1;}
-  if(model.experience?.length){sectionTitle("Experience");model.experience.forEach((entry)=>{y=ensurePdfSpace(doc,y,10);y=addPdfText(doc,[entry.title,entry.company,entry.dates].filter(Boolean).join(" | "),margin,y,contentWidth,{size:9.8,bold:true,after:1});(entry.bullets||[]).forEach(bullet);y+=1;});}
-  if(model.projects?.length){sectionTitle("Projects");model.projects.forEach((project)=>{y=ensurePdfSpace(doc,y,10);y=addPdfText(doc,[project.name,project.dates].filter(Boolean).join(" | "),margin,y,contentWidth,{size:9.8,bold:true,after:0.8});if(project.technologies?.length)y=addPdfText(doc,"Technologies: "+project.technologies.join(", "),margin,y,contentWidth,{size:8.9,color:[88,88,88],after:1});(project.bullets||[]).forEach(bullet);y+=1;});}
-  if(model.education?.length){sectionTitle("Education");model.education.forEach((entry)=>{y=addPdfText(doc,[entry.degree,entry.institution,entry.dates].filter(Boolean).join(" | "),margin,y,contentWidth,{size:9.8,bold:true,after:1});(entry.details||[]).forEach((detail)=>{y=addPdfText(doc,detail,margin+3,y,contentWidth-3,{size:9.1,color:[66,66,66],after:0.8});});y+=1;});}
-  if(model.certifications?.length){sectionTitle("Certifications");model.certifications.forEach(bullet);y+=1;}
-  if(model.achievements?.length){sectionTitle("Achievements");model.achievements.forEach(bullet);}
-  const totalPages=doc.getNumberOfPages(); for(let page=1;page<=totalPages;page+=1){doc.setPage(page);doc.setFont("Helvetica","normal");doc.setFontSize(7.8);doc.setTextColor(130,130,130);doc.text("ResumeAI • "+(targetRole||"Tailored Resume")+" • Page "+page+" of "+totalPages,margin,287);}
-  const safeRole=String(targetRole||"tailored-resume").replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,""); doc.save("ResumeAI-"+(safeRole||"tailored-resume")+".pdf");
+  const model = parseTailoredResume(value) || parseLegacyResume(value);
+  if (!model) return;
+
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+
+  // Compact single-column A4 layout optimized for a one-page fresher resume.
+  const margin = 14;
+  const contentWidth = 210 - margin * 2;
+  const bottomLimit = 285;
+  let y = 18;
+
+  doc.setProperties({
+    title: model.name ? `${model.name} — Resume` : "Resume",
+    subject: targetRole,
+  });
+
+  // Header
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(19);
+  doc.setTextColor(24, 24, 24);
+  doc.text(model.name || "Resume", margin, y);
+  y += 6.5;
+
+  const headline =
+    model.headline || (targetRole ? `Tailored for ${targetRole}` : "");
+  if (headline) {
+    y = addPdfText(doc, headline, margin, y, contentWidth, {
+      size: 9.7,
+      color: [80, 80, 80],
+      after: 0.8,
+    });
+  }
+
+  const contacts = [
+    ...(model.contact_items || []),
+    ...(model.links || []),
+  ]
+    .map(normalize)
+    .filter(Boolean);
+
+  if (contacts.length) {
+    y = addPdfText(doc, contacts.join(" • "), margin, y, contentWidth, {
+      size: 8.0,
+      color: [82, 82, 82],
+      after: 0.45,
+    });
+  }
+
+  if (model.location) {
+    y = addPdfText(doc, model.location, margin, y, contentWidth, {
+      size: 8.0,
+      color: [82, 82, 82],
+      after: 1.8,
+    });
+  }
+
+  doc.setDrawColor(245, 158, 11);
+  doc.setLineWidth(0.55);
+  doc.line(margin, y, 210 - margin, y);
+  y += 5.2;
+
+  const startNewPage = () => {
+    doc.addPage();
+    y = 17;
+  };
+
+  const estimateLines = (text, width, size) => {
+    doc.setFont("Helvetica", "normal");
+    doc.setFontSize(size);
+    return doc.splitTextToSize(normalize(text), width).length;
+  };
+
+  const ensureSpace = (needed) => {
+    if (y + needed <= bottomLimit) return;
+    startNewPage();
+  };
+
+  const sectionTitle = (title, estimatedBody = 8) => {
+    ensureSpace(7 + estimatedBody);
+    doc.setFont("Helvetica", "bold");
+    doc.setFontSize(9.7);
+    doc.setTextColor(24, 24, 24);
+    doc.text(title.toUpperCase(), margin, y);
+
+    y += 4.7;
+
+    doc.setDrawColor(225, 225, 225);
+    doc.setLineWidth(0.22);
+    doc.line(margin, y - 1.6, 210 - margin, y - 1.6);
+    y += 1.2;
+  };
+
+  const writeBullet = (textValue, indent = 4.2) => {
+    const value = normalize(textValue);
+    if (!value) return;
+
+    const size = 8.5;
+    const lineHeight = 3.95;
+
+    doc.setFont("Helvetica", "normal");
+    doc.setFontSize(size);
+
+    const lines = doc.splitTextToSize(value, contentWidth - indent);
+    const needed = lines.length * lineHeight + 0.55;
+
+    ensureSpace(needed + 1.5);
+
+    doc.setFont("Helvetica", "normal");
+    doc.setFontSize(size);
+    doc.setTextColor(45, 45, 45);
+    doc.text("•", margin, y);
+    doc.text(lines, margin + indent, y);
+
+    y += needed;
+  };
+
+  const writeCompactText = (textValue, options = {}) => {
+    const value = normalize(textValue);
+    if (!value) return;
+
+    const size = options.size ?? 8.6;
+    const lineHeight = options.lineHeight ?? 3.95;
+    const after = options.after ?? 0.8;
+    const bold = Boolean(options.bold);
+    const width = options.width ?? contentWidth;
+    const x = options.x ?? margin;
+    const color = options.color ?? [42, 42, 42];
+
+    const lineCount = estimateLines(value, width, size);
+    ensureSpace(lineCount * lineHeight + after + 1);
+
+    doc.setFont("Helvetica", bold ? "bold" : "normal");
+    doc.setFontSize(size);
+    doc.setTextColor(...color);
+
+    const lines = doc.splitTextToSize(value, width);
+    doc.text(lines, x, y);
+    y += lines.length * lineHeight + after;
+  };
+
+  // Summary
+  if (model.summary) {
+    sectionTitle("Summary", 15);
+    writeCompactText(model.summary, {
+      size: 8.75,
+      lineHeight: 3.95,
+      after: 1.0,
+    });
+  }
+
+  // Skills
+  if (model.skills?.length) {
+    const skillHeight = model.skills.reduce(
+      (sum, group) => {
+        const line = `${group.category}: ${(group.skills || []).join(", ")}`;
+        return (
+          sum +
+          Math.max(1, estimateLines(line, contentWidth, 8.45)) * 3.85 +
+          0.5
+        );
+      },
+      0,
+    );
+
+    sectionTitle("Skills", skillHeight + 1);
+
+    model.skills.forEach((group) => {
+      const skills = (group.skills || []).join(", ");
+      if (!skills) return;
+
+      writeCompactText(`${group.category}: ${skills}`, {
+        size: 8.45,
+        lineHeight: 3.85,
+        after: 0.45,
+      });
+    });
+
+    y += 0.5;
+  }
+
+  // Experience
+  if (model.experience?.length) {
+    sectionTitle("Experience", 10);
+
+    model.experience.forEach((entry) => {
+      const heading = [entry.title, entry.company, entry.dates]
+        .filter(Boolean)
+        .join(" | ");
+
+      if (heading) {
+        writeCompactText(heading, {
+          size: 8.8,
+          lineHeight: 3.95,
+          bold: true,
+          after: 0.35,
+        });
+      }
+
+      (entry.bullets || []).forEach((bulletText) => {
+        writeBullet(bulletText);
+      });
+
+      y += 0.45;
+    });
+  }
+
+  // Projects
+  if (model.projects?.length) {
+    sectionTitle("Projects", 14);
+
+    model.projects.forEach((project) => {
+      const heading = [project.name, project.dates]
+        .filter(Boolean)
+        .join(" | ");
+
+      if (heading) {
+        const lines = (() => {
+          doc.setFont("Helvetica", "bold");
+          doc.setFontSize(8.8);
+          return doc.splitTextToSize(heading, contentWidth);
+        })();
+
+        ensureSpace(lines.length * 3.95 + 2);
+
+        doc.setFont("Helvetica", "bold");
+        doc.setFontSize(8.8);
+        doc.setTextColor(24, 24, 24);
+        doc.text(lines, margin, y);
+        y += lines.length * 3.95 + 0.25;
+      }
+
+      if (project.technologies?.length) {
+        writeCompactText(
+          `Technologies: ${project.technologies.join(", ")}`,
+          {
+            size: 8.1,
+            lineHeight: 3.7,
+            color: [88, 88, 88],
+            after: 0.35,
+          },
+        );
+      }
+
+      (project.bullets || []).forEach((bulletText) => {
+        writeBullet(bulletText);
+      });
+
+      y += 0.4;
+    });
+  }
+
+  // Education
+  if (model.education?.length) {
+    sectionTitle("Education", 12);
+
+    model.education.forEach((entry) => {
+      const heading = [entry.degree, entry.institution, entry.dates]
+        .filter(Boolean)
+        .join(" | ");
+
+      if (heading) {
+        writeCompactText(heading, {
+          size: 8.75,
+          lineHeight: 3.9,
+          bold: true,
+          after: 0.3,
+        });
+      }
+
+      (entry.details || []).forEach((detail) => {
+        writeCompactText(detail, {
+          size: 8.2,
+          lineHeight: 3.7,
+          x: margin + 2,
+          width: contentWidth - 2,
+          color: [65, 65, 65],
+          after: 0.25,
+        });
+      });
+
+      y += 0.45;
+    });
+  }
+
+  // Certifications
+  if (model.certifications?.length) {
+    const certEstimate = model.certifications.reduce(
+      (sum, item) =>
+        sum +
+        Math.max(1, estimateLines(item, contentWidth - 4.2, 8.35)) * 3.8 +
+        0.5,
+      0,
+    );
+
+    const totalCertNeeded = 7 + certEstimate;
+
+    if (y + totalCertNeeded > bottomLimit && y < bottomLimit - 20) {
+      startNewPage();
+    }
+
+    sectionTitle("Certifications", certEstimate + 1);
+    model.certifications.forEach((item) => writeBullet(item));
+  }
+
+  // Achievements
+  if (model.achievements?.length) {
+    sectionTitle("Achievements", 10);
+    model.achievements.forEach((item) => writeBullet(item));
+  }
+
+  // No product branding/footer is added to the candidate's resume PDF.
+
+  const safeRole = String(targetRole || "tailored-resume")
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-|-$/g, "");
+
+  doc.save(
+    `ResumeAI-${safeRole || "tailored-resume"}.pdf`,
+  );
 }
