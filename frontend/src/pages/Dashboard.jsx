@@ -36,6 +36,7 @@ import TailoredResumePreview, {
   downloadTailoredResumePdf,
   resumeToPlainText,
 } from "../components/TailoredResumePreview";
+import CoverLetterPreview from "../components/CoverLetterPreview";
 
 const NAV_ITEMS = [
   { id: "home", label: "Overview", icon: LayoutDashboard },
@@ -2048,8 +2049,21 @@ export default function Dashboard() {
                   </div>
                 )}
 
+                {/* RESUMEAI_COVER_UI_V2 */}
                 {selectedOpportunity.cover_letter && (
-                  <div className="opportunity-section"><div className="section-header"><div><div className="eyebrow">Application asset</div><h3>Cover letter ready</h3></div><button className="secondary-button small" onClick={() => { navigator.clipboard.writeText(selectedOpportunity.cover_letter); toast.success("Cover letter copied"); }}>Copy</button></div><pre className="opportunity-document-preview">{selectedOpportunity.cover_letter}</pre></div>
+                  <div className="opportunity-section">
+                    <CoverLetterPreview
+                      letter={selectedOpportunity.cover_letter}
+                      companyName={selectedOpportunity.company_name}
+                      jobTitle={selectedOpportunity.job_title}
+                      loading={opportunityActionLoading}
+                      onCopy={() => {
+                        navigator.clipboard.writeText(selectedOpportunity.cover_letter);
+                        toast.success("Cover letter copied");
+                      }}
+                      onRegenerate={() => runOpportunityAction("cover-letter")}
+                    />
+                  </div>
                 )}
 
                 <div className="opportunity-section"><div className="eyebrow">Job description</div><div className="job-description-preview">{selectedOpportunity.job_description}</div></div>

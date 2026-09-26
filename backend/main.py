@@ -1184,7 +1184,12 @@ async def opportunity_cover_letter(
         if not resume:
             raise HTTPException(status_code=400, detail="Upload a resume before generating a cover letter.")
 
-        letter = generate_cover_letter(resume.content, opportunity.job_title, opportunity.company_name)
+        letter = generate_cover_letter(
+            resume.content,
+            opportunity.job_title,
+            opportunity.company_name,
+            opportunity.job_description,
+        )
         opportunity.cover_letter = letter
         if opportunity.status == "saved":
             opportunity.status = "analyzed"
