@@ -510,7 +510,7 @@ export default function Dashboard() {
       doc.setFont("Helvetica", "normal");
       doc.setFontSize(10);
       doc.text(
-        `${opportunity.company_name || "Company"}  ?  Application Pack`,
+        `${opportunity.company_name || "Company"}  •  Application Pack`,
         margin,
         y
       );
