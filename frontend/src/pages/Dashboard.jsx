@@ -493,7 +493,7 @@ export default function Dashboard() {
 
     const bulletList = (items = []) => {
       items.forEach((item) => {
-        textBlock(`? ${item}`, 9.6, 4.8, 2);
+        textBlock(`- ${item}`, 9.6, 4.8, 2);
       });
     };
 
@@ -531,7 +531,7 @@ export default function Dashboard() {
         doc.setTextColor(125, 125, 125);
 
         doc.text(
-          `ResumeAI ? Application Pack ? ${page}/${totalPages}`,
+          `ResumeAI | Application Pack | ${page}/${totalPages}`,
           margin,
           pageHeight - 8
         );
