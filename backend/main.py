@@ -965,20 +965,37 @@ async def prepare_application(
             ensure_ascii=False,
         )
 
-        # RESUMEAI_APPLICATION_PACK_COVER_JD_V1
-        cover_letter = opportunity.cover_letter or generate_cover_letter(
-            resume.content,
-            opportunity.job_title,
-            opportunity.company_name,
-            opportunity.job_description,
+        existing_pack = json.loads(opportunity.application_pack) if opportunity.application_pack else {}
+        if not isinstance(existing_pack, dict):
+            existing_pack = {}
+
+        # RESUMEAI_APPLICATION_PACK_COVER_CONTEXT_V1
+        current_cover_context = {
+            "company_name": opportunity.company_name,
+            "job_title": opportunity.job_title,
+        }
+        saved_cover_context = existing_pack.get("cover_letter_context")
+
+        cover_context_matches = (
+            isinstance(saved_cover_context, dict)
+            and str(saved_cover_context.get("company_name", "")).strip().lower()
+                == str(current_cover_context["company_name"]).strip().lower()
+            and str(saved_cover_context.get("job_title", "")).strip().lower()
+                == str(current_cover_context["job_title"]).strip().lower()
         )
 
-        existing_pack = json.loads(opportunity.application_pack) if opportunity.application_pack else None
-        interview_prep = (
-            existing_pack.get("interview_prep")
-            if isinstance(existing_pack, dict)
-            else None
-        )
+        if opportunity.cover_letter and cover_context_matches:
+            cover_letter = opportunity.cover_letter
+        else:
+            # RESUMEAI_APPLICATION_PACK_COVER_JD_V1
+            cover_letter = generate_cover_letter(
+                resume.content,
+                opportunity.job_title,
+                opportunity.company_name,
+                opportunity.job_description,
+            )
+
+        interview_prep = existing_pack.get("interview_prep")
 
         if not interview_prep:
             interview_prep = generate_application_prep(
@@ -992,6 +1009,7 @@ async def prepare_application(
             "match_result": match_result,
             "tailored_resume": tailored_resume_model,
             "cover_letter": cover_letter,
+            "cover_letter_context": current_cover_context,
             "interview_prep": interview_prep,
             "prepared_for": {
                 "company_name": opportunity.company_name,
@@ -1193,6 +1211,18 @@ async def opportunity_cover_letter(
             opportunity.job_description,
         )
         opportunity.cover_letter = letter
+
+        # RESUMEAI_COVER_CONTEXT_V1
+        existing_pack = json.loads(opportunity.application_pack) if opportunity.application_pack else {}
+        if not isinstance(existing_pack, dict):
+            existing_pack = {}
+        existing_pack["cover_letter"] = letter
+        existing_pack["cover_letter_context"] = {
+            "company_name": opportunity.company_name,
+            "job_title": opportunity.job_title,
+        }
+        opportunity.application_pack = json.dumps(existing_pack, ensure_ascii=False)
+
         if opportunity.status == "saved":
             opportunity.status = "analyzed"
 
