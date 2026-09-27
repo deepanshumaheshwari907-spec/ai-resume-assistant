@@ -965,10 +965,12 @@ async def prepare_application(
             ensure_ascii=False,
         )
 
+        # RESUMEAI_APPLICATION_PACK_COVER_JD_V1
         cover_letter = opportunity.cover_letter or generate_cover_letter(
             resume.content,
             opportunity.job_title,
             opportunity.company_name,
+            opportunity.job_description,
         )
 
         existing_pack = json.loads(opportunity.application_pack) if opportunity.application_pack else None
