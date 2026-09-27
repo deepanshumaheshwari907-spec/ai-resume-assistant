@@ -446,104 +446,238 @@ export default function Dashboard() {
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const margin = 16;
     const pageWidth = 210;
+    const pageHeight = 297;
     const contentWidth = pageWidth - margin * 2;
-    let y = 18;
+    const bottomLimit = 280;
+    let y = 20;
 
-    const addPageIfNeeded = (needed = 12) => {
-      if (y + needed > 280) {
-        doc.addPage();
-        y = 18;
+    const newPage = () => {
+      doc.addPage();
+      y = 20;
+    };
+
+    const ensureSpace = (needed = 10) => {
+      if (y + needed > bottomLimit) newPage();
+    };
+
+    const sectionHeading = (text) => {
+      ensureSpace(16);
+      doc.setFont("Helvetica", "bold");
+      doc.setFontSize(14);
+      doc.text(text, margin, y);
+      y += 8;
+    };
+
+    const textBlock = (text, size = 10, gap = 5.1, indent = 0) => {
+      const value = String(text || "").trim();
+      if (!value) return;
+
+      doc.setFont("Helvetica", "normal");
+      doc.setFontSize(size);
+
+      const lines = doc.splitTextToSize(
+        value,
+        contentWidth - indent
+      );
+
+      const needed = lines.length * gap + 3;
+      ensureSpace(needed);
+
+      lines.forEach((line) => {
+        doc.text(line, margin + indent, y);
+        y += gap;
+      });
+
+      y += 2;
+    };
+
+    const bulletList = (items = []) => {
+      items.forEach((item) => {
+        textBlock(`? ${item}`, 9.6, 4.8, 2);
+      });
+    };
+
+    const renderPageHeader = () => {
+      doc.setFont("Helvetica", "bold");
+      doc.setFontSize(21);
+      doc.text("RESUMEAI", margin, y);
+      y += 8;
+
+      doc.setFontSize(14);
+      doc.text(String(opportunity.job_title || "Application"), margin, y);
+      y += 6;
+
+      doc.setFont("Helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text(
+        `${opportunity.company_name || "Company"}  ?  Application Pack`,
+        margin,
+        y
+      );
+      y += 6;
+
+      doc.setDrawColor(215, 215, 215);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 8;
+    };
+
+    const addFooter = () => {
+      const totalPages = doc.getNumberOfPages();
+
+      for (let page = 1; page <= totalPages; page += 1) {
+        doc.setPage(page);
+        doc.setFont("Helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(125, 125, 125);
+
+        doc.text(
+          `ResumeAI ? Application Pack ? ${page}/${totalPages}`,
+          margin,
+          pageHeight - 8
+        );
+
+        doc.setTextColor(0, 0, 0);
       }
     };
 
-    const heading = (text, size = 15) => {
-      addPageIfNeeded(14);
-      doc.setFont("Helvetica", "bold");
-      doc.setFontSize(size);
-      doc.text(text, margin, y);
-      y += size * 0.55 + 4;
-    };
-
-    const body = (text, size = 10.5, gap = 5.5) => {
-      const value = String(text || "").trim();
-      if (!value) return;
-      doc.setFont("Helvetica", "normal");
-      doc.setFontSize(size);
-      const lines = doc.splitTextToSize(value, contentWidth);
-      lines.forEach((line) => {
-        addPageIfNeeded(gap + 1);
-        doc.text(line, margin, y);
-        y += gap;
-      });
-      y += 1;
-    };
-
-    const bulletList = (items) => {
-      (items || []).forEach((item) => body(`• ${item}`, 10, 5));
-    };
-
-    doc.setFont("Helvetica", "bold");
-    doc.setFontSize(22);
-    doc.text("RESUMEAI", margin, y);
-    y += 8;
-    doc.setFontSize(15);
-    doc.text(`${opportunity.job_title}`, margin, y);
-    y += 6;
-    doc.setFont("Helvetica", "normal");
-    doc.setFontSize(10.5);
-    doc.text(`${opportunity.company_name}  •  Application Pack`, margin, y);
-    y += 8;
-
-    doc.setDrawColor(210, 210, 210);
-    doc.line(margin, y, pageWidth - margin, y);
-    y += 8;
-
-    heading("APPLICATION SNAPSHOT");
-    body(`Match score: ${opportunity.match_score != null ? `${opportunity.match_score}%` : "Not calculated"}`);
-    body(`Application status: ${String(opportunity.status || "saved").replace(/\b\w/g, (c) => c.toUpperCase())}`);
-
     const match = pack.match_result || opportunity.match_result || {};
-    heading("JOB MATCH");
-    if (match.recommendation) body(match.recommendation);
-    if (match.matched_keywords?.length) {
-      body("Matched keywords:", 10.5, 5);
-      bulletList(match.matched_keywords);
-    }
-    if (match.missing_keywords?.length) {
-      body("Missing / weak keywords:", 10.5, 5);
-      bulletList(match.missing_keywords);
-    }
-
-    heading("INTERVIEW PREP");
     const interview = pack.interview_prep || {};
-    if (interview.talking_points?.length) {
-      body("Talking points:", 10.5, 5);
-      bulletList(interview.talking_points);
-    }
-    if (interview.questions?.length) {
-      body("Questions:", 10.5, 5);
-      interview.questions.forEach((q, i) => body(`${i + 1}. ${q}`, 10, 5.5));
-    }
-
-    heading("TAILORED RESUME");
-    body(
+    const tailoredResumeText =
       resumeToPlainText(pack.tailored_resume) ||
-        "No tailored resume was generated.",
-      10,
+      "No tailored resume was generated.";
+    const coverLetter =
+      pack.cover_letter ||
+      "No cover letter was generated.";
+
+    // PAGE 1 ? APPLICATION + JOB MATCH
+    renderPageHeader();
+
+    sectionHeading("APPLICATION SNAPSHOT");
+    textBlock(
+      `Match score: ${
+        opportunity.match_score != null
+          ? `${opportunity.match_score}%`
+          : "Not calculated"
+      }`,
+      10.2,
       5.2
     );
 
-    heading("COVER LETTER");
-    body(pack.cover_letter || "No cover letter was generated.", 10, 5.2);
+    textBlock(
+      `Application status: ${String(
+        opportunity.status || "saved"
+      ).replace(/\b\w/g, (c) => c.toUpperCase())}`,
+      10.2,
+      5.2
+    );
 
-    addPageIfNeeded(10);
-    doc.setFont("Helvetica", "italic");
-    doc.setFontSize(8.5);
-    doc.text("Generated by ResumeAI. Job match scores are estimates and employer hiring systems may differ.", margin, 286);
+    sectionHeading("JOB MATCH");
 
-    const safeCompany = String(opportunity.company_name || "company").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "");
-    const safeRole = String(opportunity.job_title || "application").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "");
-    doc.save(`${safeCompany}-${safeRole}-application-pack.pdf`);
+    if (match.recommendation) {
+      textBlock(match.recommendation, 10, 5.1);
+    }
+
+    if (match.matched_keywords?.length) {
+      doc.setFont("Helvetica", "bold");
+      doc.setFontSize(10);
+      ensureSpace(8);
+      doc.text("Matched keywords", margin, y);
+      y += 6;
+      bulletList(match.matched_keywords);
+    }
+
+    if (match.missing_keywords?.length) {
+      doc.setFont("Helvetica", "bold");
+      doc.setFontSize(10);
+      ensureSpace(8);
+      doc.text("Missing / weak keywords", margin, y);
+      y += 6;
+      bulletList(match.missing_keywords);
+    }
+
+    // PAGE 2 ? INTERVIEW PREP
+    newPage();
+    sectionHeading("INTERVIEW PREP");
+
+    if (interview.talking_points?.length) {
+      doc.setFont("Helvetica", "bold");
+      doc.setFontSize(10);
+      ensureSpace(8);
+      doc.text("Talking points", margin, y);
+      y += 6;
+      bulletList(interview.talking_points);
+    }
+
+    if (interview.questions?.length) {
+      doc.setFont("Helvetica", "bold");
+      doc.setFontSize(10);
+      ensureSpace(8);
+      doc.text("Interview questions", margin, y);
+      y += 6;
+
+      interview.questions.forEach((question, index) => {
+        textBlock(`${index + 1}. ${question}`, 9.7, 5, 0);
+      });
+    }
+
+    // PAGE 3+ ? TAILORED RESUME
+    newPage();
+    sectionHeading("TAILORED RESUME");
+
+    const resumeLines = String(tailoredResumeText)
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    resumeLines.forEach((line) => {
+      const isHeading =
+        line === line.toUpperCase() &&
+        line.length < 48 &&
+        !line.includes("@") &&
+        !line.startsWith("http");
+
+      textBlock(
+        line,
+        isHeading ? 11.5 : 9.5,
+        isHeading ? 5.8 : 4.8
+      );
+    });
+
+    // COVER LETTER ALWAYS STARTS CLEANLY
+    newPage();
+    sectionHeading("COVER LETTER");
+
+    const coverParagraphs = String(coverLetter)
+      .split(/\n\s*\n/)
+      .map((paragraph) => paragraph.trim())
+      .filter(Boolean);
+
+    if (coverParagraphs.length) {
+      coverParagraphs.forEach((paragraph) => {
+        textBlock(paragraph, 10, 5.4);
+      });
+    } else {
+      textBlock(coverLetter, 10, 5.4);
+    }
+
+    addFooter();
+
+    const safeCompany = String(
+      opportunity.company_name || "company"
+    )
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-|-$/g, "");
+
+    const safeRole = String(
+      opportunity.job_title || "application"
+    )
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-|-$/g, "");
+
+    doc.save(
+      `${safeCompany}-${safeRole}-application-pack.pdf`
+    );
+
     toast.success("Application pack PDF downloaded");
   };
 
