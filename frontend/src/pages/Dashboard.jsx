@@ -447,7 +447,7 @@ export default function Dashboard() {
     const margin = 16;
     const pageWidth = 210;
     const pageHeight = 297;
-    const contentWidth = pageWidth         textBlock(- , 9.6, 4.8, 2);margin * 2;
+    const contentWidth = pageWidth - margin * 2;
     const bottomLimit = 280;
     let y = 20;
 
@@ -477,7 +477,7 @@ export default function Dashboard() {
 
       const lines = doc.splitTextToSize(
         value,
-        contentWidth         textBlock(- , 9.6, 4.8, 2);indent
+        contentWidth - indent
       );
 
       const needed = lines.length * gap + 3;
@@ -493,7 +493,7 @@ export default function Dashboard() {
 
     const bulletList = (items = []) => {
       items.forEach((item) => {
-        textBlock(`- ${item}`, 9.6, 4.8, 2);
+        textBlock(`? ${item}`, 9.6, 4.8, 2);
       });
     };
 
@@ -531,7 +531,7 @@ export default function Dashboard() {
         doc.setTextColor(125, 125, 125);
 
         doc.text(
-          `ResumeAI | Application Pack | ${page}/${totalPages}`,
+          `ResumeAI ? Application Pack ? ${page}/${totalPages}`,
           margin,
           pageHeight - 8
         );
@@ -1000,7 +1000,7 @@ export default function Dashboard() {
         <section className="da-card stat-card">
           <div className="stat-icon"><Clock3 size={18} /></div>
           <div><span>Analyses used</span><strong>{analysesUsed}</strong></div>
-          <small>{Math.max(0, analysesLimit         textBlock(- , 9.6, 4.8, 2);analysesUsed)} remaining in development</small>
+          <small>{Math.max(0, analysesLimit - analysesUsed)} remaining in development</small>
         </section>
         <section className="da-card stat-card wide-stat">
           <div className="stat-icon"><Sparkles size={18} /></div>
@@ -1308,7 +1308,7 @@ export default function Dashboard() {
       deadline.getDate()
     );
 
-    const diffDays = Math.ceil((deadlineStart         textBlock(- , 9.6, 4.8, 2);todayStart) / 86400000);
+    const diffDays = Math.ceil((deadlineStart - todayStart) / 86400000);
 
     if (diffDays < 0) return { label: "Overdue", tone: "danger" };
     if (diffDays === 0) return { label: "Due today", tone: "danger" };
@@ -1336,7 +1336,7 @@ export default function Dashboard() {
       followUp.getDate()
     );
 
-    const diffDays = Math.ceil((followUpStart         textBlock(- , 9.6, 4.8, 2);todayStart) / 86400000);
+    const diffDays = Math.ceil((followUpStart - todayStart) / 86400000);
 
     if (diffDays < 0) return { label: "Follow-up overdue", tone: "danger" };
     if (diffDays === 0) return { label: "Follow up today", tone: "danger" };
@@ -1880,7 +1880,7 @@ export default function Dashboard() {
                               <div className="workspace-v2-step-icon">
                                 {step.done ? <CheckCircle2 size={15} /> : <span>{index + 1}</span>}
                               </div>
-                              {index < steps.length         textBlock(- , 9.6, 4.8, 2);1 && <div className="workspace-v2-connector" />}
+                              {index < steps.length - 1 && <div className="workspace-v2-connector" />}
                             </div>
 
                             <div className="workspace-v2-step-copy">
@@ -2067,7 +2067,7 @@ export default function Dashboard() {
                             <div className={`timeline-marker timeline-${activity.event_type}`}>
                               {getActivityIcon(activity.event_type)}
                             </div>
-                            {index < activityData.length         textBlock(- , 9.6, 4.8, 2);1 && <div className="timeline-line" />}
+                            {index < activityData.length - 1 && <div className="timeline-line" />}
                           </div>
                           <div className="timeline-item-content">
                             <div className="timeline-item-topline">
