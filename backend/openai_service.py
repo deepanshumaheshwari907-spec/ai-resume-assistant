@@ -996,11 +996,67 @@ RESUME DATA:
 Write the final cover letter now.
 """
 
-    return _text_generation(
+    letter = _text_generation(
         system=system,
         user=user,
         max_output_tokens=1800,
     )
+
+    # RESUMEAI_COVER_ROLE_GUARD_V1
+    target_role = job_role.strip()
+    target_company = company_name.strip()
+    canonical_opening = (
+        f"I am writing to express my strong interest in the "
+        f"{target_role} position at {target_company}."
+    )
+
+    def ensure_exact_role_opening(text: str) -> str:
+        value = (text or "").strip()
+        lower = value.lower()
+        marker = "i am writing"
+
+        if marker in lower:
+            start_idx = lower.find(marker)
+            end_idx = value.find(".", start_idx)
+            if end_idx != -1:
+                value = (
+                    value[:start_idx]
+                    + canonical_opening
+                    + value[end_idx + 1:]
+                )
+        elif target_role.lower() not in lower:
+            lines = value.splitlines()
+            insert_at = 1 if lines and lines[0].strip().lower().startswith("dear ") else 0
+            lines.insert(insert_at, canonical_opening)
+            value = "\n".join(lines)
+
+        return value.strip()
+
+    letter = ensure_exact_role_opening(letter)
+
+    if target_role.lower() not in letter.lower():
+        correction_user = user + f"""
+
+FINAL ROLE VALIDATION:
+- The exact target role is: {target_role}
+- The exact company is: {target_company}
+- The opening sentence MUST mention that exact target role.
+- Do not mention any different role title.
+- Return the complete corrected cover letter.
+"""
+        letter = _text_generation(
+            system=system,
+            user=correction_user,
+            max_output_tokens=1800,
+        )
+        letter = ensure_exact_role_opening(letter)
+
+    if target_role.lower() not in letter.lower():
+        raise RuntimeError(
+            "Cover letter generation returned a draft without the exact target role."
+        )
+
+    return letter
 
 
 def interview_turn(answer: str, history: str) -> Dict[str, Any]:
