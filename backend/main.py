@@ -1109,7 +1109,10 @@ async def match_opportunity(
         result = match_job(resume.content, opportunity.job_description)
         opportunity.match_score = int(result.get("match_score", 0))
         opportunity.match_result = json.dumps(result)
-        opportunity.status = "analyzed"
+
+        # RESUMEAI_TRACKER_STATUS_GUARD_V1
+        if opportunity.status == "saved":
+            opportunity.status = "analyzed"
 
         # RESUMEAI_TIMELINE_V1
         record_opportunity_activity(
@@ -1161,7 +1164,10 @@ async def tailor_opportunity(
             tailored,
             ensure_ascii=False,
         )
-        opportunity.status = "tailored"
+
+        # RESUMEAI_TRACKER_STATUS_GUARD_V1
+        if opportunity.status in {"saved", "analyzed"}:
+            opportunity.status = "tailored"
 
         # RESUMEAI_TIMELINE_V1
         record_opportunity_activity(
