@@ -1,7 +1,14 @@
-# Environment & secrets
+# Package-local marker; do not commit secrets.
+
+# Environment variables and secrets
 .env
 .env.*
 !.env.example
+!.env.*.example
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
 
 # Python
 __pycache__/
@@ -9,22 +16,22 @@ __pycache__/
 .venv/
 venv/
 
-# Local database / temporary files
+# Local databases and backups
 *.db
 *.sqlite
 *.sqlite3
-temp.pdf
+*.backup-*
+*-backup-*/
+*-backups/
 
-# Node / React
+# Frontend dependencies and build output
 node_modules/
-frontend/build/
-frontend/.cache/
+build/
+dist/
 
-# Logs
-*.log
-
-# OS / editor
-.DS_Store
-Thumbs.db
-.vscode/
-.idea/
+# Local backup snapshots
+*backup*/
+*backup*
+*.backup.*
+*.backup-*
+*.bak

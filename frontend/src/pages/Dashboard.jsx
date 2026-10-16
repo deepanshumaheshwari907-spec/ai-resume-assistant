@@ -68,9 +68,9 @@ const OPPORTUNITY_STAGES = [
 ];
 
 const getScoreLabel = (score) => {
-  if (score >= 80) return "Strong match";
+  if (score >= 80) return "Strong profile";
   if (score >= 65) return "Good foundation";
-  if (score >= 50) return "Needs improvement";
+  if (score >= 50) return "Needs refinement";
   return "Needs attention";
 };
 
@@ -88,7 +88,10 @@ export default function Dashboard() {
   const [storedResume, setStoredResume] = useState(null);
   const [jobRole, setJobRole] = useState("AI/ML Engineer");
   const [result, setResult] = useState(null);
+  // Role tied to the result currently being displayed; the editable target can change before re-analysis.
+  const [analysisJobRole, setAnalysisJobRole] = useState("");
   const [rewritten, setRewritten] = useState(null);
+  const [rewrittenJobRole, setRewrittenJobRole] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [rewriteLoading, setRewriteLoading] = useState(false);
@@ -151,6 +154,7 @@ export default function Dashboard() {
   useEffect(() => {
     fetchLatestResume();
     fetchHistory(true);
+    fetchOpportunities();
     // These functions intentionally remain component-local because they capture current UI state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -210,6 +214,7 @@ export default function Dashboard() {
             ? JSON.parse(history[0].result)
             : history[0].result;
           setResult(latestResult || null);
+          setAnalysisJobRole(history[0].job_role || "");
           if (history[0].job_role) setJobRole(history[0].job_role);
         } catch (parseError) {
           console.error("Latest analysis parse failed:", parseError);
@@ -731,6 +736,7 @@ export default function Dashboard() {
     try {
       const res = await api.post(file ? "/upload-resume" : "/analyze-saved-resume", formData);
       setResult(res.data.result);
+      setAnalysisJobRole(jobRole.trim() || "Software Engineer");
       setRewritten(null);
       await refreshUser();
       await fetchLatestResume();
@@ -745,14 +751,36 @@ export default function Dashboard() {
   const handleRewrite = async () => {
     if (!hasResume) return toast.error("Upload a resume first");
     const formData = new FormData();
+    const targetRole = jobRole.trim() || "Software Engineer";
     if (file) formData.append("file", file);
-    if (storedResume?.id) formData.append("resume_id", String(storedResume.id));
-    formData.append("job_role", jobRole.trim() || "Software Engineer");
+    else if (storedResume?.id) formData.append("resume_id", String(storedResume.id));
+    formData.append("job_role", targetRole);
     setRewriteLoading(true);
     try {
       const res = await api.post("/rewrite", formData);
-      setRewritten(res.data.rewritten_resume);
-      toast.success("Resume rewritten");
+      const rawResume = res.data.rewritten_resume;
+      let resumePayload = rawResume;
+
+      // Structured resume JSON is returned as a string to preserve compatibility
+      // with the current FastAPI response contract and existing application records.
+      if (typeof rawResume === "string") {
+        try {
+          const parsed = JSON.parse(rawResume);
+          if (parsed && typeof parsed === "object" && parsed.format_version === 1) {
+            resumePayload = parsed;
+          }
+        } catch {
+          // Keep a legacy plain-text draft readable if an older backend is running.
+        }
+      }
+
+      setRewritten(resumePayload);
+      setRewrittenJobRole(targetRole);
+      if (resumePayload && typeof resumePayload === "object" && resumePayload.format_version === 1) {
+        toast.success("Structured resume ready to review");
+      } else {
+        toast.success("Resume draft generated");
+      }
     } catch (err) {
       toast.error(err.response?.data?.detail || "Rewrite failed");
     } finally {
@@ -762,21 +790,209 @@ export default function Dashboard() {
 
   const downloadPDF = () => {
     if (!rewritten) return toast.error("Rewrite the resume first");
-    const doc = new jsPDF();
-    let y = 18;
-    doc.setFont("Helvetica", "normal");
-    const lines = doc.splitTextToSize(rewritten, 178);
-    lines.forEach((line) => {
-      const heading = line === line.toUpperCase() && line.length < 42 && !line.includes("@");
-      doc.setFont("Helvetica", heading ? "bold" : "normal");
-      doc.setFontSize(heading ? 13 : 10.5);
-      doc.text(line, 16, y);
-      y += heading ? 8 : 5.7;
-      if (y > 278) {
-        doc.addPage();
-        y = 18;
+    const currentRole = jobRole.trim() || "Software Engineer";
+    if (rewrittenJobRole && rewrittenJobRole.trim().replace(/\s+/g, " ").toLowerCase() !== currentRole.trim().replace(/\s+/g, " ").toLowerCase()) {
+      return toast.error("The target role changed. Build the tailored resume again before downloading.");
+    }
+
+    if (typeof rewritten === "object" && rewritten.format_version === 1) {
+      downloadTailoredResumePdf(rewritten, rewrittenJobRole || currentRole || "Tailored Resume");
+      toast.success("Formatted resume PDF downloaded");
+      return;
+    }
+
+    // Backward-compatible exporter for a legacy plain-text result from an older backend.
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const marginX = 15;
+    const topMargin = 16;
+    const bottomLimit = pageHeight - 18;
+    const contentWidth = pageWidth - marginX * 2;
+    let y = topMargin;
+
+    const sectionHeadings = new Set([
+      "SUMMARY",
+      "PROFESSIONAL SUMMARY",
+      "OBJECTIVE",
+      "SKILLS",
+      "TECHNICAL SKILLS",
+      "EXPERIENCE",
+      "WORK EXPERIENCE",
+      "PROJECTS",
+      "EDUCATION",
+      "CERTIFICATIONS",
+      "CERTIFICATIONS & COURSES",
+      "COURSES",
+      "ACHIEVEMENTS",
+    ]);
+
+    // jsPDF's built-in Helvetica font does not reliably render Unicode bullets.
+    // Convert typographic punctuation to safe ASCII before writing the PDF.
+    const normalizeLine = (value) =>
+      String(value || "")
+        .replace(/[\u2022\u25CF\u25AA\u25E6\u2043\u2219]/g, "-")
+        .replace(/[\u2010-\u2015\u2212]/g, "-")
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/[\u201C\u201D]/g, '"')
+        .replace(/\u00A0/g, " ")
+        .replace(/[\u200B-\u200D\uFEFF]/g, "")
+        .replace(/\t/g, " ")
+        .trim();
+
+    const normalizedLines = [];
+    for (const rawLine of rewritten.replace(/\r/g, "").split("\n")) {
+      const line = normalizeLine(rawLine);
+      if (!line) {
+        if (normalizedLines.length && normalizedLines[normalizedLines.length - 1] !== "") {
+          normalizedLines.push("");
+        }
+      } else {
+        normalizedLines.push(line);
       }
+    }
+    while (normalizedLines[normalizedLines.length - 1] === "") normalizedLines.pop();
+
+    const addPage = () => {
+      doc.addPage();
+      y = topMargin;
+    };
+
+    const ensureRoom = (neededHeight) => {
+      if (y + neededHeight > bottomLimit) addPage();
+    };
+
+    const isSectionHeading = (line) =>
+      sectionHeadings.has(line.replace(/:$/, "").trim().toUpperCase());
+
+    const isDateLine = (line) =>
+      /^(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+)?\d{4}\s*[-/]\s*(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+)?\d{4}$/i.test(line) ||
+      /^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+\d{4}\s*[-/]\s*(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+)?\d{4}$/i.test(line);
+
+    const firstContentIndex = normalizedLines.findIndex((line) => line !== "");
+    const firstSectionIndex = normalizedLines.findIndex((line) => isSectionHeading(line));
+
+    normalizedLines.forEach((line, index) => {
+      if (!line) {
+        y += 1.6;
+        return;
+      }
+
+      // Candidate name: slightly larger, with a small brand-colour rule.
+      if (index === firstContentIndex) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(16);
+        doc.setTextColor(24, 29, 38);
+        const wrappedName = doc.splitTextToSize(line, contentWidth);
+        ensureRoom(wrappedName.length * 6.1 + 3);
+        doc.text(wrappedName, marginX, y);
+        y += wrappedName.length * 6.1 + 1.5;
+        doc.setDrawColor(238, 158, 35);
+        doc.setLineWidth(0.65);
+        doc.line(marginX, y, pageWidth - marginX, y);
+        y += 4.2;
+        return;
+      }
+
+      // Contact details between the name and first main section.
+      if (firstSectionIndex > index && index > firstContentIndex) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8.7);
+        doc.setTextColor(88, 96, 108);
+        const lines = doc.splitTextToSize(line, contentWidth);
+        ensureRoom(lines.length * 3.7 + 0.8);
+        doc.text(lines, marginX, y);
+        y += lines.length * 3.7 + 0.8;
+        return;
+      }
+
+      if (isSectionHeading(line)) {
+        ensureRoom(11.5);
+        y += 2.2;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10.6);
+        doc.setTextColor(25, 32, 43);
+        doc.text(line.replace(/:$/, ""), marginX, y);
+        y += 2.0;
+        doc.setDrawColor(225, 229, 235);
+        doc.setLineWidth(0.25);
+        doc.line(marginX, y, pageWidth - marginX, y);
+        y += 4.0;
+        return;
+      }
+
+      // Detect project / education entries by their following date or technology line.
+      const nextLine = normalizedLines.slice(index + 1).find((item) => item !== "") || "";
+      const isEntryTitle =
+        !/^[-*]\s*/.test(line) &&
+        (isDateLine(nextLine) || /^technologies\s*:/i.test(nextLine)) &&
+        line.length < 115;
+
+      if (isEntryTitle) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9.5);
+        doc.setTextColor(36, 43, 54);
+        const lines = doc.splitTextToSize(line, contentWidth);
+        ensureRoom(lines.length * 4.1 + 1.2);
+        doc.text(lines, marginX, y);
+        y += lines.length * 4.1 + 1.0;
+        return;
+      }
+
+      if (isDateLine(line) || /^technologies\s*:/i.test(line)) {
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(8.3);
+        doc.setTextColor(93, 101, 113);
+        const lines = doc.splitTextToSize(line, contentWidth);
+        ensureRoom(lines.length * 3.6 + 0.7);
+        doc.text(lines, marginX, y);
+        y += lines.length * 3.6 + 0.7;
+        return;
+      }
+
+      const bulletMatch = line.match(/^[-*]\s*(.*)$/);
+      if (bulletMatch) {
+        const bulletText = bulletMatch[1].trim();
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9.1);
+        doc.setTextColor(38, 44, 54);
+        const bulletX = marginX + 1.0;
+        const textX = marginX + 5.0;
+        const lines = doc.splitTextToSize(bulletText, contentWidth - 5.0);
+        const lineHeight = 4.05;
+        ensureRoom(lines.length * lineHeight + 0.9);
+        doc.setTextColor(224, 143, 28);
+        doc.text("-", bulletX, y);
+        doc.setTextColor(38, 44, 54);
+        doc.text(lines, textX, y);
+        y += lines.length * lineHeight + 0.9;
+        return;
+      }
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9.1);
+      doc.setTextColor(38, 44, 54);
+      const lines = doc.splitTextToSize(line, contentWidth);
+      const lineHeight = 4.05;
+      ensureRoom(lines.length * lineHeight + 0.8);
+      doc.text(lines, marginX, y);
+      y += lines.length * lineHeight + 0.8;
     });
+
+    // Add compact page numbering after all content pages are known.
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let page = 1; page <= pageCount; page += 1) {
+      doc.setPage(page);
+      doc.setDrawColor(225, 229, 235);
+      doc.setLineWidth(0.25);
+      doc.line(marginX, pageHeight - 12, pageWidth - marginX, pageHeight - 12);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.8);
+      doc.setTextColor(112, 119, 130);
+      doc.text("ResumeAI - Resume Draft", marginX, pageHeight - 7);
+      doc.text(`Page ${page} of ${pageCount}`, pageWidth - marginX, pageHeight - 7, { align: "right" });
+    }
+
     doc.save("resume-rewritten.pdf");
     toast.success("Resume PDF downloaded");
   };
@@ -908,7 +1124,7 @@ export default function Dashboard() {
           <div className="eyebrow">Resume health</div>
           <h3>{score ? `${score}/100` : "Not analyzed yet"}</h3>
           <p>{score ? scoreLabel : "Upload your resume to see your current match estimate."}</p>
-          {latestAnalysis?.job_role && <span className="score-role">Latest role · {latestAnalysis.job_role}</span>}
+          {(analysisJobRole || latestAnalysis?.job_role) && <span className="score-role">Analysis role · {analysisJobRole || latestAnalysis.job_role}</span>}
         </div>
         <div className={`score-ring ${scoreTone}`} style={{ "--score": `${score}%` }}>
           <div className="score-ring-inner">{score ? score : "—"}</div>
@@ -978,105 +1194,190 @@ export default function Dashboard() {
     </section>
   );
 
-  const renderOverview = () => (
-    <div className="tab-content-active">
-      <div className="hero-row">
-        <div>
-          <div className="eyebrow">Career workspace</div>
-          <h1>Welcome back, {user?.name?.split(" ")[0] || "there"}.</h1>
-          <p>Turn your resume into a stronger application—one step at a time.</p>
-        </div>
-        <button className="primary-button hero-cta" onClick={() => goTo("analyze")}>
-          Analyze resume <ArrowRight size={17} />
-        </button>
-      </div>
+  const renderOverview = () => {
+    /* RESUMEAI_DASHBOARD_POLISH_V3 */
+    const stageCounts = OPPORTUNITY_STAGES.reduce((acc, stage) => {
+      acc[stage.id] = opportunities.filter((item) => item.status === stage.id).length;
+      return acc;
+    }, {});
 
-      <div className="stats-grid">
-        <section className="da-card stat-card">
-          <div className="stat-icon"><BarChart3 size={18} /></div>
-          <div><span>Latest score</span><strong>{score ? score : "—"}</strong></div>
-          <small>{score ? scoreLabel : "No analysis yet"}</small>
-        </section>
-        <section className="da-card stat-card">
-          <div className="stat-icon"><Clock3 size={18} /></div>
-          <div><span>Analyses used</span><strong>{analysesUsed}</strong></div>
-          <small>{Math.max(0, analysesLimit - analysesUsed)} remaining in development</small>
-        </section>
-        <section className="da-card stat-card wide-stat">
-          <div className="stat-icon"><Sparkles size={18} /></div>
-          <div className="stat-wide-copy"><span>Current workflow</span><strong>{hasResume ? "Resume loaded" : "Upload your resume"}</strong><small>{hasResume ? selectedResumeName : "Start by choosing a PDF."}</small></div>
-          <span className={`status-dot ${hasResume ? "ready" : "pending"}`} title={hasResume ? "Resume ready" : "Resume pending"} />
-          <button className="icon-button" onClick={() => goTo(file ? "analyze" : "analyze")} aria-label="Open analyze">
-            <ChevronRight size={18} />
-          </button>
-        </section>
-      </div>
+    const liveOpportunity = ['offer', 'interview', 'applied', 'tailored', 'analyzed', 'saved']
+      .map((status) => opportunities.find((item) => item.status === status))
+      .find(Boolean) || null;
 
-      <div className="overview-grid">
-        <div className="overview-main">
-          {renderUploadPanel()}
-          {renderRoleCard()}
+    const pipelineTotal = opportunities.filter((item) => item.status !== 'closed').length;
+    const archivedOpportunityTotal = opportunities.length - pipelineTotal;
+    const resumeScore = score || Number(latestAnalysis?.score || 0);
+    const scorePercent = Math.min(100, Math.max(0, resumeScore));
 
-          <section className="tool-grid">
-            {[
-              ["analyze", "Analyze", "See strengths, gaps and a compatibility estimate.", BarChart3],
-              ["jd", "Job Match", "Compare your resume to a specific job description.", Target],
-              ["rewrite", "Rewrite", "Make your resume clearer without inventing facts.", PenLine],
-              ["cover", "Cover Letter", "Generate a role-aware first draft in seconds.", FileText],
-            ].map(([id, title, desc, Icon]) => (
-              <button className="tool-card" key={id} onClick={() => goTo(id)}>
-                <div className="tool-card-icon"><Icon size={18} /></div>
-                <div><strong>{title}</strong><span>{desc}</span></div>
-                <ArrowRight size={16} className="tool-arrow" />
-              </button>
-            ))}
-          </section>
-        </div>
+    let nextTitle = 'Upload your resume';
+    let nextCopy = 'Start by adding the resume you want ResumeAI to work from.';
+    let nextAction = 'Upload resume';
+    let nextHandler = () => document.getElementById('resume-file')?.click();
 
-        <aside className="overview-side">
-          {renderScoreCard()}
-          <section className="da-card usage-card">
-            <div className="eyebrow">Development usage</div>
-            <div className="usage-number"><strong>{analysesUsed}</strong><span>/ {analysesLimit}</span></div>
-            <div className="score-progress"><span style={{ width: `${usagePercent}%` }} /></div>
-            <p>These limits are for development testing. Production credits will be configured separately.</p>
-          </section>
-          <section className="da-card latest-card">
-            <div className="section-header">
-              <div><div className="eyebrow">Latest activity</div><h3>{latestAnalysis ? latestAnalysis.job_role : "No analysis yet"}</h3></div>
-              {latestAnalysis && <span className="soft-badge">{latestAnalysis.score}/100</span>}
-            </div>
-            <p>{latestAnalysis ? new Date(latestAnalysis.created_at).toLocaleString() : "Run your first analysis to build your resume history."}</p>
-            <button className="text-button" onClick={() => goTo("analyze")}>
-              {latestAnalysis ? "Open latest analysis" : "Start analysis"} <ArrowRight size={15} />
-            </button>
-          </section>
-          <section className="da-card trust-card">
-            <ShieldCheck size={18} />
-            <div><strong>Privacy-first workflow</strong><p>Your API keys stay on the server. ResumeAI uses your resume only to power the selected tool.</p></div>
-          </section>
-        </aside>
-      </div>
+    if (!hasResume) {
+      // First-time users should set up a resume before working on a saved role.
+      nextTitle = 'Upload your resume';
+      nextCopy = 'Add your resume once, then use it across analysis, tailoring and job matching.';
+      nextAction = 'Upload resume';
+      nextHandler = () => document.getElementById('resume-file')?.click();
+    } else if (!resumeScore) {
+      nextTitle = 'Run your first analysis';
+      nextCopy = 'Establish a baseline so ResumeAI can show strengths and the most useful improvements.';
+      nextAction = 'Analyze resume';
+      nextHandler = () => goTo('analyze');
+    } else if (liveOpportunity) {
+      const role = liveOpportunity.job_title || 'your target role';
 
-      <section className="da-card recent-card">
-        <div className="section-header"><div><div className="eyebrow">Activity</div><h3>Recent analyses</h3></div><button className="text-button" onClick={() => goTo("history")}>View history <ArrowRight size={15} /></button></div>
-        {!recentHistory.length ? (
-          <div className="empty-state"><History size={24} /><p>Your completed analyses will appear here.</p><button className="secondary-button" onClick={() => goTo("analyze")}>Run your first analysis</button></div>
-        ) : (
-          <div className="history-list compact-list">
-            {recentHistory.map((h) => (
-              <button key={h.id} className="history-row" onClick={() => { try { setResult(typeof h.result === "string" ? JSON.parse(h.result) : h.result); } catch { setResult(null); } if (h.job_role) setJobRole(h.job_role); goTo("analyze"); }}>
-                <div className="history-row-icon"><FileText size={16} /></div>
-                <div className="history-row-copy"><strong>{h.job_role}</strong><span>{new Date(h.created_at).toLocaleDateString()}</span></div>
-                <strong className={`history-score ${getScoreTone(h.score)}`}>{h.score}/100</strong>
-                <ChevronRight size={16} className="muted-icon" />
-              </button>
-            ))}
+      if (liveOpportunity.status === 'saved') {
+        nextTitle = `Match ${role}`;
+        nextCopy = 'Compare your resume with this role and identify the gaps before applying.';
+        nextAction = 'Open Job Match';
+        nextHandler = () => goTo('jd');
+      } else if (liveOpportunity.status === 'analyzed') {
+        nextTitle = `Tailor ${role}`;
+        nextCopy = 'Use the match signals to create a focused, role-specific resume.';
+        nextAction = 'Rewrite resume';
+        nextHandler = () => goTo('rewrite');
+      } else if (liveOpportunity.status === 'tailored') {
+        nextTitle = `Finish ${role} application`;
+        nextCopy = 'Review your application materials and move this opportunity forward.';
+        nextAction = 'Open tracker';
+        nextHandler = () => goTo('opportunities');
+      } else if (liveOpportunity.status === 'applied') {
+        nextTitle = `Check in on ${role}`;
+        nextCopy = 'Review your application status and keep your next follow-up up to date.';
+        nextAction = 'Open tracker';
+        nextHandler = () => goTo('opportunities');
+      } else if (liveOpportunity.status === 'interview') {
+        nextTitle = `Prepare for ${role}`;
+        nextCopy = 'Practice your story and likely questions before the next interview stage.';
+        nextAction = 'Practice interview';
+        nextHandler = () => goTo('interview');
+      } else if (liveOpportunity.status === 'offer') {
+        nextTitle = `Review your ${role} offer`;
+        nextCopy = 'Check the offer details and record your decision or next steps.';
+        nextAction = 'Open tracker';
+        nextHandler = () => goTo('opportunities');
+      } else {
+        nextTitle = `Follow up on ${role}`;
+        nextCopy = 'Review the application timeline and choose the next step.';
+        nextAction = 'Open tracker';
+        nextHandler = () => goTo('opportunities');
+      }
+    } else {
+      nextTitle = 'Review your resume';
+      nextCopy = 'Your resume already has a health score. Review the analysis and choose what to improve next.';
+      nextAction = 'Open analysis';
+      nextHandler = () => goTo('analyze');
+    }
+
+    const pipelineStages = [
+      ['saved', 'Saved'],
+      ['analyzed', 'Analyzed'],
+      ['tailored', 'Tailored'],
+      ['applied', 'Applied'],
+      ['interview', 'Interview'],
+      ['offer', 'Offer'],
+    ];
+
+    return (
+      <div className="dashboard-overview-v2">
+        <section className="overview-v2-hero">
+          <div className="overview-v2-hero-copy">
+            <div className="eyebrow">Career command center</div>
+            <h1>Welcome back, {user?.name?.split(' ')[0] || 'there'}.</h1>
+            <p>Your applications, resume health and next move — in one place.</p>
           </div>
-        )}
-      </section>
-    </div>
-  );
+</section>
+
+        <section className="overview-v2-command-grid">
+          <article className="da-card overview-v2-card overview-v2-action-card">
+            <div className="overview-v2-card-top"><div><div className="eyebrow">Next action</div><h3>{nextTitle}</h3></div><span className="overview-v2-index">01</span></div>
+            <p>{nextCopy}</p>
+            <button className="primary-button" onClick={nextHandler}>{nextAction} <ArrowRight size={16} /></button>
+          </article>
+
+          <article className="da-card overview-v2-card overview-v2-health-card">
+            <div className="overview-v2-card-top">
+              <div><div className="eyebrow">Resume health</div><h3>{resumeScore ? `${resumeScore}/100` : 'Not analyzed'}</h3></div>
+              <div className={`overview-v2-score-ring ${resumeScore ? 'has-score' : ''}`} style={{ '--score': `${scorePercent}%` }}><span>{resumeScore || '—'}</span></div>
+            </div>
+            <p>{resumeScore ? getScoreLabel(resumeScore) : 'Upload and analyze your resume to establish a baseline.'}</p>
+            <div className="overview-v2-line"><span style={{ width: `${scorePercent}%` }} /></div>
+            <div className="overview-v2-meta-row"><span>{storedResume?.filename || 'No resume selected'}</span><button className="text-button" onClick={() => goTo('analyze')}>View report <ArrowRight size={14} /></button></div>
+          </article>
+
+          <article className="da-card overview-v2-card overview-v2-app-card">
+            <div className="overview-v2-card-top"><div><div className="eyebrow">Active application</div><h3>{liveOpportunity?.job_title || 'No active opportunity'}</h3></div><span className="soft-badge">{liveOpportunity ? String(liveOpportunity.status || 'saved').toUpperCase() : 'READY'}</span></div>
+            {liveOpportunity ? (
+              <><p>{liveOpportunity.company_name || 'Saved opportunity'}</p><div className="overview-v2-app-detail"><span>Match</span><strong>{liveOpportunity.match_score != null ? `${liveOpportunity.match_score}%` : '—'}</strong></div><button className="secondary-button" onClick={() => goTo('opportunities')}>Open application <ArrowRight size={15} /></button></>
+            ) : (
+              <><p>Save a role to connect matching, tailoring and follow-ups in one place.</p><button className="secondary-button" onClick={() => goTo('opportunities')}>Open tracker <ArrowRight size={15} /></button></>
+            )}
+          </article>
+        </section>
+
+        <section className={`da-card overview-v2-pipeline ${pipelineTotal === 0 ? "is-empty" : "has-applications"}`}>
+          <div className="overview-v2-section-head"><div><div className="eyebrow">Application pipeline</div><h3>Keep the job hunt moving.</h3></div>{pipelineTotal > 0 && <button className="text-button" onClick={() => goTo('opportunities')}>Open tracker <ArrowRight size={14} /></button>}</div>
+          {pipelineTotal === 0 ? (
+            <div className="overview-v2-pipeline-empty">
+              <div className="overview-v2-pipeline-empty-icon"><BriefcaseBusiness size={18} aria-hidden="true" /></div>
+              <div className="overview-v2-pipeline-empty-copy">
+                <strong>Your pipeline starts with one role.</strong>
+                <span>Save a job you are interested in, then track it from first match through interview and offer.</span>
+              </div>
+              <button className="secondary-button small" onClick={() => { setShowOpportunityForm(true); goTo('opportunities'); }}>Add first opportunity <ArrowRight size={14} /></button>
+            </div>
+          ) : (
+            <div className="overview-v2-pipeline-track">
+              {pipelineStages.map(([id, label], index) => (
+                <div className="overview-v2-stage" key={id}>
+                  <div className="overview-v2-stage-top"><span className="overview-v2-stage-number">{String(index + 1).padStart(2, '0')}</span><strong>{stageCounts[id] || 0}</strong></div>
+                  <span className="overview-v2-stage-label">{label}</span>
+                  {index < pipelineStages.length - 1 && <i className="overview-v2-stage-line" />}
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="overview-v2-pipeline-foot"><span>{pipelineTotal} active {pipelineTotal === 1 ? 'opportunity' : 'opportunities'}</span><span>{archivedOpportunityTotal ? `${archivedOpportunityTotal} closed ${archivedOpportunityTotal === 1 ? 'opportunity is' : 'opportunities are'} archived.` : pipelineTotal ? 'Closed applications stay archived in the tracker.' : 'Your pipeline will update as you add roles.'}</span></div>
+        </section>
+
+        <div className="overview-v2-lower-grid">
+          <section className="da-card overview-v2-resume-center">
+            <div className="overview-v2-section-head"><div><div className="eyebrow">Resume center</div><h3>Your working resume</h3></div><span className={`soft-badge ${hasResume ? 'success-badge' : ''}`}>{hasResume ? 'READY' : 'EMPTY'}</span></div>
+            <div className="overview-v2-document"><div className="overview-v2-document-icon"><FileText size={20} /></div><div className="overview-v2-document-copy"><strong>{storedResume?.filename || file?.name || 'No resume uploaded yet'}</strong><span>{hasResume ? 'Available across your ResumeAI tools.' : 'Upload once and reuse it across your workflow.'}</span></div><button className="icon-button" onClick={() => document.getElementById('resume-file')?.click()} aria-label="Choose resume"><UploadCloud size={16} /></button></div>
+            <div className="overview-v2-tool-row">
+              <button className="tool-card compact" onClick={() => goTo('analyze')}><BarChart3 size={16} /><span>Analyze</span><ArrowRight size={14} /></button>
+              <button className="tool-card compact" onClick={() => goTo('rewrite')}><PenLine size={16} /><span>Rewrite</span><ArrowRight size={14} /></button>
+              <button className="tool-card compact" onClick={() => goTo('jd')}><Target size={16} /><span>Job Match</span><ArrowRight size={14} /></button>
+            </div>
+            <div className="overview-v2-resume-meta">
+              <div><span>Current target role</span><strong>{jobRole.trim() || 'Choose a target role'}</strong></div>
+              <div><span>Last analysis</span><strong>{recentHistory[0]?.created_at ? new Date(recentHistory[0].created_at).toLocaleDateString() : 'Not analyzed yet'}</strong></div>
+            </div>
+          </section>
+
+          <section className="da-card overview-v2-activity">
+            <div className="overview-v2-section-head"><div><div className="eyebrow">Recent activity</div><h3>What changed lately.</h3></div><button className="text-button" onClick={() => goTo('history')}>History <ArrowRight size={14} /></button></div>
+            {!recentHistory.length ? (
+              <div className="overview-v2-empty"><History size={20} /><strong>No analysis activity yet.</strong><span>Run your first analysis and your timeline starts here.</span></div>
+            ) : (
+              <div className="overview-v2-activity-list">
+                {recentHistory.slice(0, 4).map((h, index) => (
+                  <button className="overview-v2-activity-row" key={h.id || `${h.job_role}-${index}`} onClick={() => { try { setResult(typeof h.result === 'string' ? JSON.parse(h.result) : h.result); } catch { setResult(null); } if (h.job_role) setJobRole(h.job_role); setAnalysisJobRole(h.job_role || ""); goTo('analyze'); }}>
+                    <span className="overview-v2-activity-index">{String(index + 1).padStart(2, '0')}</span><span className="overview-v2-activity-copy"><strong>{h.job_role}</strong><small>{new Date(h.created_at).toLocaleDateString()}</small></span><strong className={`history-score ${getScoreTone(h.score)}`}>{h.score}</strong><ChevronRight size={15} className="muted-icon" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+
+        <section className="overview-v2-footer-strip"><div><ShieldCheck size={15} /><strong>Your data stays inside your workspace.</strong><span>ResumeAI keeps your application context connected across tools.</span></div><button className="secondary-button" onClick={() => goTo('opportunities')}>View application tracker <ArrowRight size={15} /></button></section>
+      </div>
+    );
+  };
 
   const renderAnalyze = () => (
     <div className="tab-content-active stack-lg">
@@ -1098,15 +1399,71 @@ export default function Dashboard() {
     </div>
   );
 
-  const renderRewrite = () => (
-    <div className="tab-content-active stack-lg">
-      <div className="page-heading"><div><div className="eyebrow">Rewrite</div><h2>Make your resume sharper.</h2><p>Rewrite for your target role while keeping the facts grounded in your original resume.</p></div></div>
-      {renderUploadPanel(true)}
-      {renderRoleCard()}
-      <div className="action-row"><button className="primary-button" onClick={handleRewrite} disabled={rewriteLoading || !hasResume}>{rewriteLoading ? <><RefreshCw size={16} className="spin" /> Rewriting...</> : <><Sparkles size={16} /> Rewrite resume</>}</button>{rewritten && <button className="secondary-button" onClick={downloadPDF}><Download size={16} /> Download PDF</button>}</div>
-      {rewritten && <section className="da-card document-card"><div className="document-header"><div><div className="eyebrow">Generated draft</div><h3>Rewritten resume</h3></div><span className="soft-badge">ATS-friendly formatting</span></div><pre>{rewritten}</pre></section>}
-    </div>
-  );
+  const renderRewrite = () => {
+    const isStructuredResume = Boolean(
+      rewritten && typeof rewritten === "object" && rewritten.format_version === 1
+    );
+    const currentRole = jobRole.trim() || "Software Engineer";
+    const rewriteRoleChanged = Boolean(
+      rewritten && rewrittenJobRole &&
+      rewrittenJobRole.trim().replace(/\s+/g, " ").toLowerCase() !==
+        currentRole.trim().replace(/\s+/g, " ").toLowerCase()
+    );
+
+    return (
+      <div className="tab-content-active stack-lg">
+        <div className="page-heading">
+          <div>
+            <div className="eyebrow">Rewrite</div>
+            <h2>Make your resume sharper.</h2>
+            <p>Build a complete, role-tailored resume with structured sections and a ready-to-download PDF.</p>
+          </div>
+        </div>
+        {renderUploadPanel(true)}
+        {renderRoleCard()}
+        <div className="action-row">
+          <button className="primary-button" onClick={handleRewrite} disabled={rewriteLoading || !hasResume}>
+            {rewriteLoading ? <><RefreshCw size={16} className="spin" /> Building your resume...</> : <><Sparkles size={16} /> Build tailored resume</>}
+          </button>
+          {rewritten && (
+            <button className="secondary-button" onClick={downloadPDF} disabled={rewriteRoleChanged || rewriteLoading}>
+              <Download size={16} /> Download resume PDF
+            </button>
+          )}
+        </div>
+        {rewriteRoleChanged && (
+          <div className="bullet-row warning">
+            <AlertCircle size={15} />
+            <span>The target role changed after this resume was generated. Build the tailored resume again before downloading for the new role.</span>
+          </div>
+        )}
+        {rewritten && (
+          <section className="da-card document-card">
+            <div className="document-header">
+              <div>
+                <div className="eyebrow">One-click resume builder</div>
+                <h3>{isStructuredResume ? "Resume ready to review" : "Resume draft"}</h3>
+                <p>Structured sections, consistent formatting, and role-specific ordering.</p>
+              </div>
+              <span className="soft-badge">{isStructuredResume ? "Professional PDF ready" : "Legacy text preview"}</span>
+            </div>
+            {isStructuredResume ? (
+              <TailoredResumePreview value={rewritten} targetRole={jobRole.trim() || "Target role"} />
+            ) : (
+              <pre>{String(rewritten)}</pre>
+            )}
+            <p
+              className="resumeAI-review-note"
+              style={{ marginTop: 12, fontSize: 12, lineHeight: 1.55, color: "var(--dash-muted, #9ca3af)" }}
+            >
+              Generated from your source resume. Before sending it to an employer, quickly verify your contact details,
+              dates, credentials, and project metrics.
+            </p>
+          </section>
+        )}
+      </div>
+    );
+  };
 
   const renderJD = () => {
     const requiredMatched = jdResult?.matched_required || [];
@@ -1128,10 +1485,14 @@ export default function Dashboard() {
     );
 
     const ScoreBar = ({ label, score: value, max }) => {
-      const pct = max ? Math.round((value / max) * 100) : 0;
+      const detected = Number(max) > 0;
+      const pct = detected ? Math.max(0, Math.min(100, Math.round((value / max) * 100))) : 0;
       return (
         <div className="jd-score-bar-row">
-          <div className="jd-score-bar-meta"><span>{label}</span><strong>{value}/{max}</strong></div>
+          <div className="jd-score-bar-meta">
+            <span>{label}</span>
+            <strong>{detected ? `${value}/${max}` : "Not detected"}</strong>
+          </div>
           <div className="jd-score-bar"><span style={{ width: `${pct}%` }} /></div>
         </div>
       );
@@ -1165,7 +1526,7 @@ export default function Dashboard() {
                 <div>
                   <div className="eyebrow">Job match estimate</div>
                   <div className="jd-hero-score-line"><h3>{jdResult.match_score}%</h3><span className={`soft-badge ${jdResult.match_score >= 70 ? "success-badge" : ""}`}>{jdResult.match_score >= 80 ? "Strong overlap" : jdResult.match_score >= 60 ? "Good overlap" : "Needs tailoring"}</span></div>
-                  <p>Deterministic requirement matching based on the job description and your saved resume.</p>
+                  <p>Deterministic matching based on your resume. Category weights are normalized across skills detected in the job description; categories with no detected skills are excluded.</p>
                 </div>
                 <div className="score-ring warm" style={{ "--score": `${jdResult.match_score}%` }}>
                   <div className="score-ring-inner">{jdResult.match_score}</div>
@@ -1180,13 +1541,13 @@ export default function Dashboard() {
 
             <div className="jd-v2-grid">
               <section className="da-card jd-skill-card">
-                <div className="section-header"><div><div className="eyebrow">Core requirements</div><h3>Required skills</h3></div><span className="soft-badge">{requiredMatched.length}/{requiredMatched.length + requiredMissing.length} matched</span></div>
+                <div className="section-header"><div><div className="eyebrow">Core requirements</div><h3>Required skills</h3></div><span className="soft-badge">{requiredMatched.length + requiredMissing.length ? `${requiredMatched.length}/${requiredMatched.length + requiredMissing.length} matched` : "No skills detected"}</span></div>
                 <div className="jd-skill-block"><div className="jd-skill-title"><CheckCircle2 size={15} /> Matched</div><SkillChips items={requiredMatched} tone="success" /></div>
                 <div className="jd-skill-block"><div className="jd-skill-title warning"><AlertCircle size={15} /> Missing or underrepresented</div><SkillChips items={requiredMissing} tone="danger" /></div>
               </section>
 
               <section className="da-card jd-skill-card">
-                <div className="section-header"><div><div className="eyebrow">Nice to have</div><h3>Preferred skills</h3></div><span className="soft-badge">{preferredMatched.length}/{preferredMatched.length + preferredMissing.length} matched</span></div>
+                <div className="section-header"><div><div className="eyebrow">Nice to have</div><h3>Preferred skills</h3></div><span className="soft-badge">{preferredMatched.length + preferredMissing.length ? `${preferredMatched.length}/${preferredMatched.length + preferredMissing.length} matched` : "No skills detected"}</span></div>
                 <div className="jd-skill-block"><div className="jd-skill-title"><CheckCircle2 size={15} /> Matched</div><SkillChips items={preferredMatched} tone="success" /></div>
                 <div className="jd-skill-block"><div className="jd-skill-title warning"><AlertCircle size={15} /> Missing or underrepresented</div><SkillChips items={preferredMissing} tone="danger" /></div>
               </section>
@@ -2213,7 +2574,7 @@ export default function Dashboard() {
     <div className="tab-content-active stack-lg">
       <div className="page-heading"><div><div className="eyebrow">History</div><h2>Your previous resume analyses.</h2><p>Keep track of roles you tested and revisit the recommendations.</p></div><button className="secondary-button" onClick={fetchHistory} disabled={historyLoading}><RefreshCw size={15} className={historyLoading ? "spin" : ""} /> Refresh</button></div>
       <section className="da-card history-card">
-        {historyLoading ? <div className="empty-state"><RefreshCw size={24} className="spin" /><p>Loading history...</p></div> : !historyData.length ? <div className="empty-state"><History size={24} /><p>No analyses yet.</p><button className="secondary-button" onClick={() => goTo("analyze")}>Analyze a resume</button></div> : <div className="history-list">{historyData.map((h) => <button key={h.id} className="history-row" onClick={() => { try { setResult(typeof h.result === "string" ? JSON.parse(h.result) : h.result); } catch { setResult(null); } goTo("analyze"); }}><div className="history-row-icon"><FileText size={16} /></div><div className="history-row-copy"><strong>{h.job_role}</strong><span>{new Date(h.created_at).toLocaleString()}</span></div><strong className={`history-score ${getScoreTone(h.score)}`}>{h.score}/100</strong><ChevronRight size={16} className="muted-icon" /></button>)}</div>}
+        {historyLoading ? <div className="empty-state"><RefreshCw size={24} className="spin" /><p>Loading history...</p></div> : !historyData.length ? <div className="empty-state"><History size={24} /><p>No analyses yet.</p><button className="secondary-button" onClick={() => goTo("analyze")}>Analyze a resume</button></div> : <div className="history-list">{historyData.map((h) => <button key={h.id} className="history-row" onClick={() => { try { setResult(typeof h.result === "string" ? JSON.parse(h.result) : h.result); } catch { setResult(null); } if (h.job_role) setJobRole(h.job_role); setAnalysisJobRole(h.job_role || ""); goTo("analyze"); }}><div className="history-row-icon"><FileText size={16} /></div><div className="history-row-copy"><strong>{h.job_role}</strong><span>{new Date(h.created_at).toLocaleString()}</span></div><strong className={`history-score ${getScoreTone(h.score)}`}>{h.score}/100</strong><ChevronRight size={16} className="muted-icon" /></button>)}</div>}
       </section>
     </div>
   );
@@ -2241,6 +2602,7 @@ export default function Dashboard() {
         </nav>
         <div className="sidebar-bottom">
           <div className="side-user"><div className="avatar">{(user?.name || "U").charAt(0).toUpperCase()}</div><div><strong>{user?.name || "User"}</strong><small>{user?.email || ""}</small></div></div>
+          <button className="logout-button auth-change-password-button" onClick={() => navigate("/change-password")}>Change password</button>
           <button className="logout-button" onClick={handleLogout}><LogOut size={16} /> Logout</button>
         </div>
       </aside>
@@ -2255,7 +2617,7 @@ export default function Dashboard() {
 
         {isBusy && <div className="loading-bar"><span /><div><strong>{activeTab === "history" ? "Loading your history..." : loaderText}</strong><small>Please keep this page open.</small></div></div>}
 
-        <div className="dashboard-content">
+        <div className={activeTab === "home" ? "dashboard-content dashboard-content-overview" : "dashboard-content"}>
           {renderActive()}
         </div>
       </main>
@@ -2277,3 +2639,4 @@ export default function Dashboard() {
     </div>
   );
 }
+

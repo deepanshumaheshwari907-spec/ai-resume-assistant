@@ -1,16 +1,80 @@
 import jsPDF from "jspdf";
 import "./TailoredResumePreview.css";
 
-const SECTION_ORDER = ["SUMMARY", "SKILLS", "EXPERIENCE", "PROJECTS", "EDUCATION", "CERTIFICATIONS", "ACHIEVEMENTS"];
+const SECTION_ORDER = ["SUMMARY", "SKILLS", "EXPERIENCE", "PROJECTS", "EDUCATION", "CERTIFICATIONS", "KEY STRENGTHS", "ACHIEVEMENTS"];
 const normalize = (value) => String(value ?? "").trim();
+const contactDedupeKey = (value) => normalize(value)
+  .replace(/^(?:Email|E-mail|Phone|Mobile|Tel|LinkedIn|GitHub|Portfolio|Website)\s*:\s*/i, "")
+  .toLocaleLowerCase()
+  .replace(/^https?:\/\//, "")
+  .replace(/^www\./, "")
+  .replace(/[\/\\ \t]+$/g, "");
+const normalizeEducationDetail = (value) => {
+  const text = normalize(value);
+  return /^coursework\s*:/i.test(text)
+    ? text.replace(/\bComputer Vision\s+(?=Natural Language Processing\b)/i, "Computer Vision, ")
+    : text;
+};
+const isPlaceholder = (value) => /^(?:untitled|unknown|not specified|not provided|n\/?a|none|null|placeholder|tbd)$/i.test(normalize(value));
+
+function splitContactValues(items, location = "") {
+  const parts = (Array.isArray(items) ? items : [items])
+    .flatMap((item) => normalize(item).split(/\s*[|•·]\s*/))
+    .map((part) => part.replace(/^(?:Email|E-mail|Phone|Mobile|Tel|LinkedIn|GitHub|Portfolio|Website)\s*:\s*/i, "").trim())
+    .filter(Boolean);
+  const locationKey = normalize(location).toLocaleLowerCase().replace(/[ ,]+$/g, "");
+  const seen = new Set();
+  return parts.filter((part) => {
+    const key = contactDedupeKey(part);
+    if (!key || (locationKey && key.replace(/[ ,]+$/g, "") === contactDedupeKey(locationKey)) || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function cleanResumeModel(model) {
+  if (!model || typeof model !== "object") return model;
+  const cleanEntries = (items, kind) => (Array.isArray(items) ? items : []).filter((entry) => {
+    if (!entry || typeof entry !== "object") return false;
+    const title = kind === "project" ? entry.name : kind === "education" ? entry.degree : entry.title;
+    const usableTitle = !isPlaceholder(title) && Boolean(normalize(title));
+    const other = kind === "education"
+      ? [entry.institution, entry.dates, ...(entry.details || [])]
+      : kind === "project"
+        ? [entry.dates, ...(entry.technologies || []), ...(entry.bullets || [])]
+        : [entry.company, entry.dates, ...(entry.bullets || [])];
+    return usableTitle || other.some((value) => !isPlaceholder(value) && Boolean(normalize(value)));
+  });
+
+  const contact_items = splitContactValues(model.contact_items, model.location);
+  const contactKeys = new Set(contact_items.map(contactDedupeKey));
+  const links = splitContactValues(model.links, model.location).filter((item) => !contactKeys.has(contactDedupeKey(item)));
+
+  return {
+    ...model,
+    contact_items,
+    links,
+    experience: cleanEntries(model.experience, "experience"),
+    projects: cleanEntries(model.projects, "project"),
+    education: cleanEntries(model.education, "education").map((entry) => ({
+      ...entry,
+      degree: isPlaceholder(entry.degree) ? "" : entry.degree,
+      institution: isPlaceholder(entry.institution) ? "" : entry.institution,
+      details: (Array.isArray(entry.details) ? entry.details : []).map(normalizeEducationDetail),
+    })),
+    certifications: (Array.isArray(model.certifications) ? model.certifications : []).filter((item) => !isPlaceholder(item)),
+    key_strengths: (Array.isArray(model.key_strengths) ? model.key_strengths : []).filter((item) => !isPlaceholder(item)),
+    achievements: (Array.isArray(model.achievements) ? model.achievements : []).filter((item) => !isPlaceholder(item)),
+  };
+}
 
 export function parseTailoredResume(value) {
   if (!value) return null;
-  if (typeof value === "object" && value.format_version === 1) return value;
+  if (typeof value === "object" && value.format_version === 1) return cleanResumeModel(value);
   if (typeof value === "string") {
     try {
       const parsed = JSON.parse(value);
-      if (parsed && typeof parsed === "object" && parsed.format_version === 1) return parsed;
+      if (parsed && typeof parsed === "object" && parsed.format_version === 1) return cleanResumeModel(parsed);
     } catch {}
   }
   return null;
@@ -45,6 +109,7 @@ function parseLegacyResume(value) {
     projects: legacyProjects(sections.PROJECTS || []),
     education: legacyEntries(sections.EDUCATION || []),
     certifications: clean(sections.CERTIFICATIONS || []),
+    key_strengths: clean(sections["KEY STRENGTHS"] || []),
     achievements: clean(sections.ACHIEVEMENTS || []),
   };
 }
@@ -102,15 +167,20 @@ export function resumeToPlainText(value) {
   if (model.projects?.length) { lines.push("", "PROJECTS"); model.projects.forEach((project) => { lines.push([project.name, project.dates].filter(Boolean).join(" | ")); if (project.technologies?.length) lines.push("Technologies: " + project.technologies.join(", ")); (project.bullets || []).forEach((bullet) => lines.push("- " + bullet)); }); }
   if (model.education?.length) { lines.push("", "EDUCATION"); model.education.forEach((entry) => { lines.push([entry.degree, entry.institution, entry.dates].filter(Boolean).join(" | ")); (entry.details || []).forEach((detail) => lines.push(detail)); }); }
   if (model.certifications?.length) { lines.push("", "CERTIFICATIONS"); model.certifications.forEach((item) => lines.push("- " + item)); }
+  if (model.key_strengths?.length) { lines.push("", "KEY STRENGTHS"); model.key_strengths.forEach((item) => lines.push("- " + item)); }
   if (model.achievements?.length) { lines.push("", "ACHIEVEMENTS"); model.achievements.forEach((item) => lines.push("- " + item)); }
   return lines.join("\n").trim();
 }
 
 const renderEntries = (items, kind) => items.map((entry, index) => {
-  const title = kind === "project" ? entry.name : entry.title;
-  const meta = kind === "project" ? [entry.dates].filter(Boolean).join(" • ") : [entry.company, entry.dates].filter(Boolean).join(" • ");
+  const title = kind === "project" ? entry.name : kind === "education" ? entry.degree : entry.title;
+  const meta = kind === "project"
+    ? [entry.dates].filter(Boolean).join(" • ")
+    : kind === "education"
+      ? [entry.institution, entry.dates].filter(Boolean).join(" • ")
+      : [entry.company, entry.dates].filter(Boolean).join(" • ");
   return <div className="tailored-resume-entry" key={(title || "entry") + "-" + index}>
-    <div className="tailored-resume-entry-top"><strong>{title || "Untitled"}</strong>{meta && <span>{meta}</span>}</div>
+    <div className="tailored-resume-entry-top">{title && !isPlaceholder(title) && <strong>{title}</strong>}{meta && <span>{meta}</span>}</div>
     {kind === "project" && entry.technologies?.length > 0 && <div className="tailored-resume-tech"><span>Technologies</span><span>{entry.technologies.join(" • ")}</span></div>}
     {kind === "education" && entry.details?.map((detail, detailIndex) => <div className="tailored-resume-detail" key={detail + "-" + detailIndex}>{detail}</div>)}
     {!!entry.bullets?.length && <ul className="tailored-resume-bullets">{entry.bullets.map((bullet, bulletIndex) => <li key={bullet + "-" + bulletIndex}>{bullet}</li>)}</ul>}
@@ -119,14 +189,14 @@ const renderEntries = (items, kind) => items.map((entry, index) => {
 
 function Section({ title, children }) { return <section className="tailored-resume-section"><h4>{title}</h4><div>{children}</div></section>; }
 
-export default function TailoredResumePreview({ value, targetRole }) {
+export default function TailoredResumePreview({ value }) {
   const model = parseTailoredResume(value) || parseLegacyResume(value);
   if (!model) return <div className="tailored-resume-empty"><p>No tailored resume is available yet.</p></div>;
   const contactLine = [...(model.contact_items || []), ...(model.links || [])].map(normalize).filter(Boolean).join(" • ");
   return <div className="tailored-resume-preview-wrap"><article className="tailored-resume-paper">
     <header className="tailored-resume-header">
       <h2>{model.name || "Tailored Resume"}</h2>
-      {model.headline ? <p className="tailored-resume-headline">{model.headline}</p> : targetRole && <p className="tailored-resume-headline">Tailored for {targetRole}</p>}
+      {model.headline && <p className="tailored-resume-headline">{model.headline}</p>}
       {contactLine && <p className="tailored-resume-contact">{contactLine}</p>}
       {model.location && <p className="tailored-resume-location">{model.location}</p>}
     </header>
@@ -136,6 +206,7 @@ export default function TailoredResumePreview({ value, targetRole }) {
     {!!model.projects?.length && <Section title="Projects">{renderEntries(model.projects, "project")}</Section>}
     {!!model.education?.length && <Section title="Education">{renderEntries(model.education, "education")}</Section>}
     {!!model.certifications?.length && <Section title="Certifications"><ul className="tailored-resume-simple-list">{model.certifications.map((item, index) => <li key={item + "-" + index}>{item}</li>)}</ul></Section>}
+    {!!model.key_strengths?.length && <Section title="Key Strengths"><ul className="tailored-resume-simple-list">{model.key_strengths.map((item, index) => <li key={item + "-" + index}>{item}</li>)}</ul></Section>}
     {!!model.achievements?.length && <Section title="Achievements"><ul className="tailored-resume-simple-list">{model.achievements.map((item, index) => <li key={item + "-" + index}>{item}</li>)}</ul></Section>}
   </article></div>;
 }
@@ -188,8 +259,7 @@ export function downloadTailoredResumePdf(value, targetRole = "Tailored Resume")
   doc.text(model.name || "Resume", margin, y);
   y += 6.5;
 
-  const headline =
-    model.headline || (targetRole ? `Tailored for ${targetRole}` : "");
+  const headline = normalize(model.headline);
   if (headline) {
     y = addPdfText(doc, headline, margin, y, contentWidth, {
       size: 9.7,
@@ -206,7 +276,7 @@ export function downloadTailoredResumePdf(value, targetRole = "Tailored Resume")
     .filter(Boolean);
 
   if (contacts.length) {
-    y = addPdfText(doc, contacts.join(" • "), margin, y, contentWidth, {
+    y = addPdfText(doc, contacts.join(" | "), margin, y, contentWidth, {
       size: 8.0,
       color: [82, 82, 82],
       after: 0.45,
@@ -275,7 +345,7 @@ export function downloadTailoredResumePdf(value, targetRole = "Tailored Resume")
     doc.setFont("Helvetica", "normal");
     doc.setFontSize(size);
     doc.setTextColor(45, 45, 45);
-    doc.text("•", margin, y);
+    doc.text("-", margin, y);
     doc.text(lines, margin + indent, y);
 
     y += needed;
@@ -469,6 +539,24 @@ export function downloadTailoredResumePdf(value, targetRole = "Tailored Resume")
     model.certifications.forEach((item) => writeBullet(item));
   }
 
+  // RESUMEAI_PDF_COMPACT_STRENGTHS_V1
+  // Keep this low-priority, source-provided section compact so it cannot become
+  // a nearly empty second page by itself. The preview still shows the full section.
+  if (model.key_strengths?.length) {
+    const strengthText = model.key_strengths
+      .map((item) => normalize(item))
+      .filter(Boolean)
+      .join("; ");
+    if (strengthText) {
+      writeCompactText(`Key strengths: ${strengthText}`, {
+        size: 7.7,
+        lineHeight: 3.25,
+        after: 0.25,
+        color: [65, 65, 65],
+      });
+    }
+  }
+
   // Achievements
   if (model.achievements?.length) {
     sectionTitle("Achievements", 10);
@@ -485,3 +573,4 @@ export function downloadTailoredResumePdf(value, targetRole = "Tailored Resume")
     `ResumeAI-${safeRole || "tailored-resume"}.pdf`,
   );
 }
+

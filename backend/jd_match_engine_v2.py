@@ -15,8 +15,9 @@ SKILLS: Tuple[str, ...] = (
     "kubernetes", "aws", "azure", "gcp", "terraform", "ci/cd", "testing", "pytest",
     "machine learning", "deep learning", "tensorflow", "pytorch", "scikit-learn", "pandas", "numpy",
     "nlp", "computer vision", "generative ai", "llm", "prompt engineering", "statistics",
-    "data analysis", "data visualization", "power bi", "tableau", "excel", "figma", "wireframing",
-    "prototyping", "user research", "design systems", "authentication", "jwt", "restful api",
+    "data analysis", "data visualization", "power bi", "tableau", "excel", "figma", "adobe xd",
+    "wireframing", "prototyping", "user research", "user journey mapping", "usability testing",
+    "accessibility", "design systems", "authentication", "jwt",
 )
 
 SYNONYMS: Dict[str, Tuple[str, ...]] = {
@@ -26,20 +27,47 @@ SYNONYMS: Dict[str, Tuple[str, ...]] = {
     "machine learning": ("ml",),
     "deep learning": ("neural networks", "cnn", "rnn", "transformer"),
     "generative ai": ("genai", "generative artificial intelligence"),
-    "llm": ("large language model", "large language models"),
+    "llm": ("llms", "large language model", "large language models"),
+    "api": ("apis",),
     "computer vision": ("opencv",),
-    "rest api": ("restful api", "rest"),
+    "rest api": ("restful api", "rest apis", "restful apis"),
     "postgresql": ("postgres",),
     "authentication": ("auth",),
+    "adobe xd": ("adobe experience design",),
+    "usability testing": ("usability test", "usability tests", "usability evaluation"),
+    "accessibility": (
+        "accessibility guideline", "accessibility guidelines",
+        "accessibility principle", "accessibility principles",
+        "web accessibility", "accessible design",
+        "accessible user interface", "accessible user interfaces",
+        "accessible interface", "accessible interfaces",
+        "accessible ui", "wcag",
+    ),
+    "user journey mapping": (
+        "user journey map", "user journey maps", "journey mapping", "customer journey mapping",
+    ),
 }
 
 REQUIRED_HEADINGS = (
-    "requirements", "required qualifications", "qualifications", "must have",
-    "required skills", "what you will need", "basic qualifications",
+    "requirements", "required qualifications", "minimum qualifications",
+    "minimum requirements", "qualifications", "must have", "must haves",
+    "required skills", "required technical skills", "technical requirements",
+    "mandatory skills", "essential skills", "what you will need", "what you ll need",
+    "basic qualifications",
 )
 PREFERRED_HEADINGS = (
     "preferred", "preferred qualifications", "nice to have", "good to have",
     "bonus", "preferred skills", "plus", "additional qualifications",
+    "desired skills", "desirable skills", "bonus skills",
+)
+GENERAL_HEADINGS = (
+    "about", "about the role", "about us", "overview", "job overview", "role overview",
+    "responsibilities", "key responsibilities", "job responsibilities", "duties",
+    "what you will do", "what you ll do", "the role", "role description", "job description",
+    "eligibility", "who you are", "who we are", "selection process", "interview process",
+    "application process", "how to apply", "benefits", "compensation", "location",
+    "employment type", "what we offer", "equal opportunity", "company overview",
+    "company", "team", "additional information", "your impact", "the opportunity",
 )
 
 
@@ -50,7 +78,31 @@ def _norm(text: str) -> str:
 
 
 def _contains(text: str, term: str) -> bool:
-    return _norm(term) in text
+    """Match whole skill tokens/phrases to avoid false positives like Java in JavaScript."""
+    normalized_text = _norm(text)
+    normalized_term = _norm(term)
+    if not normalized_text or not normalized_term:
+        return False
+    parts = re.split(r"\s+", normalized_term)
+    phrase = r"\s+".join(re.escape(part) for part in parts)
+    return re.search(rf"(?<![a-z0-9]){phrase}(?![a-z0-9])", normalized_text) is not None
+
+
+def _heading_key(line: str) -> str:
+    """Normalize plain, Markdown, bold, and numbered section headings."""
+    value = (line or "").strip()
+    value = re.sub(r"^\s{0,3}#{1,6}\s*", "", value)
+    value = re.sub(r"^\s*\d+[.)]\s*", "", value)
+    value = re.sub(r"[*_`~]", "", value)
+    value = re.sub(r"\s+#{1,6}\s*$", "", value)
+    value = _norm(value).strip().rstrip(":").strip()
+    value = re.sub(r"[-_/]+", " ", value)
+    value = re.sub(r"[^a-z0-9 ]", " ", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def _matches_heading(value: str, headings: Tuple[str, ...]) -> bool:
+    return any(value == heading or value.startswith(heading + " ") for heading in headings)
 
 
 def _skill_candidates(skill: str) -> Tuple[str, ...]:
@@ -59,31 +111,49 @@ def _skill_candidates(skill: str) -> Tuple[str, ...]:
 
 def _extract_skills(job_description: str) -> List[str]:
     text = _norm(job_description)
-    return [skill for skill in SKILLS if any(_contains(text, candidate) for candidate in _skill_candidates(skill))]
+    found = [skill for skill in SKILLS if any(_contains(text, candidate) for candidate in _skill_candidates(skill))]
+    # Prefer specific concepts over generic terms to avoid duplicate counting.
+    if "rest api" in found:
+        found = [skill for skill in found if skill != "api"]
+    if "usability testing" in found:
+        found = [skill for skill in found if skill != "testing"]
+    return found
 
 
 def _section_texts(job_description: str) -> Tuple[str, str]:
+    """Extract explicit required/preferred sections from common JD formatting styles."""
     lines = [ln.strip() for ln in (job_description or "").splitlines() if ln.strip()]
     required_lines: List[str] = []
     preferred_lines: List[str] = []
     current = "general"
+
     for line in lines:
-        n = _norm(line).rstrip(":")
-        if any(n == h or n.startswith(h + ":") for h in REQUIRED_HEADINGS):
+        value = _heading_key(line)
+        is_markdown_heading = bool(re.match(r"^\s{0,3}#{1,6}\s+", line))
+        is_bullet_item = bool(re.match(r"^\s*[-*+•]\s+", line))
+        # Do not interpret ordinary bullets such as "- Experience with FastAPI" as headings.
+        # Numbered headings ("1. Required Skills") remain eligible after prefix normalization.
+        can_be_heading = is_markdown_heading or not is_bullet_item
+
+        if can_be_heading and _matches_heading(value, REQUIRED_HEADINGS):
             current = "required"
-            continue
-        if any(n == h or n.startswith(h + ":") for h in PREFERRED_HEADINGS):
+            # Keep content on a heading-like line such as "Required Skills include Python".
+            if value in REQUIRED_HEADINGS or value.rstrip(":") in REQUIRED_HEADINGS:
+                continue
+        elif can_be_heading and _matches_heading(value, PREFERRED_HEADINGS):
             current = "preferred"
-            continue
-        # Also recognize headings embedded in lines such as "Requirements:"
-        if any(n.startswith(h + " ") or n.startswith(h + ":") for h in REQUIRED_HEADINGS):
-            current = "required"
-        elif any(n.startswith(h + " ") or n.startswith(h + ":") for h in PREFERRED_HEADINGS):
-            current = "preferred"
+            if value in PREFERRED_HEADINGS:
+                continue
+        elif can_be_heading and _matches_heading(value, GENERAL_HEADINGS):
+            current = "general"
+            if value in GENERAL_HEADINGS:
+                continue
+
         if current == "required":
             required_lines.append(line)
         elif current == "preferred":
             preferred_lines.append(line)
+
     return "\n".join(required_lines), "\n".join(preferred_lines)
 
 
@@ -126,27 +196,69 @@ def calculate_job_match(resume_text: str, job_description: str) -> Dict[str, obj
     matched_preferred, missing_preferred = _match(resume_text, preferred)
     matched_general, missing_general = _match(resume_text, general)
 
-    # Deterministic weighted score: required 70%, preferred 20%, general 10%.
-    required_score = (len(matched_required) / len(required) * 70) if required else 0
-    preferred_score = (len(matched_preferred) / len(preferred) * 20) if preferred else 0
-    general_score = (len(matched_general) / len(general) * 10) if general else 0
+    # Keep the original relative weights (required/preferred/general = 70/20/10),
+    # but redistribute them across categories that are actually present in this JD.
+    # The displayed category contributions therefore add up to the overall score.
+    base_weights = {
+        "required_skills": 70,
+        "preferred_skills": 20,
+        "general_alignment": 10,
+    }
+    category_counts = {
+        "required_skills": (len(matched_required), len(required)),
+        "preferred_skills": (len(matched_preferred), len(preferred)),
+        "general_alignment": (len(matched_general), len(general)),
+    }
+    active_categories = [key for key, (_, total) in category_counts.items() if total]
+    active_weight = sum(base_weights[key] for key in active_categories)
 
-    active_weight = (70 if required else 0) + (20 if preferred else 0) + (10 if general else 0)
+    exact_maxima = {
+        key: (base_weights[key] * 100 / active_weight if key in active_categories else 0.0)
+        for key in base_weights
+    } if active_weight else {key: 0.0 for key in base_weights}
+
+    # Largest-remainder allocation keeps integer category maxima summing to 100.
+    integer_maxima = {key: int(value) for key, value in exact_maxima.items()}
     if active_weight:
-        raw_score = ((required_score + preferred_score + general_score) / active_weight) * 100
-    else:
-        raw_score = 0
+        remaining_points = 100 - sum(integer_maxima.values())
+        remainder_order = sorted(
+            active_categories,
+            key=lambda key: (exact_maxima[key] - integer_maxima[key], -list(base_weights).index(key)),
+            reverse=True,
+        )
+        for key in remainder_order[:remaining_points]:
+            integer_maxima[key] += 1
 
-    # Small, deterministic quality signal for a real JD with responsibilities/requirements.
-    text = _norm(job_description)
-    signal_words = ("responsibilities", "requirements", "qualifications", "experience", "build", "develop", "deploy")
-    quality_bonus = min(5, sum(1 for s in signal_words if s in text))
-    score = max(0, min(100, round(raw_score * 0.95 + quality_bonus)))
+    exact_points = {
+        key: (matched / total * exact_maxima[key] if total else 0.0)
+        for key, (matched, total) in category_counts.items()
+    }
+    score = max(0, min(100, round(sum(exact_points.values()))))
+
+    # Allocate rounded point contributions so the displayed breakdown sums exactly to the score.
+    integer_points = {key: int(value) for key, value in exact_points.items()}
+    points_to_allocate = score - sum(integer_points.values())
+    point_order = sorted(
+        active_categories,
+        key=lambda key: (exact_points[key] - integer_points[key], -list(base_weights).index(key)),
+        reverse=True,
+    )
+    for key in point_order[:max(0, points_to_allocate)]:
+        if integer_points[key] < integer_maxima[key]:
+            integer_points[key] += 1
+
+    # Guard rounding at edge cases so component points always sum to the displayed score.
+    difference = score - sum(integer_points.values())
+    if difference and active_categories:
+        last_key = max(active_categories, key=lambda key: integer_maxima[key] - integer_points[key])
+        integer_points[last_key] = max(0, min(integer_maxima[last_key], integer_points[last_key] + difference))
 
     matched_all = matched_required + matched_preferred + matched_general
     missing_all = missing_required + missing_preferred + missing_general
 
-    if score >= 80:
+    if not active_categories:
+        recommendation = "No recognizable skills were detected in this job description. Paste the complete posting, including its requirements and responsibilities, and try again."
+    elif score >= 80:
         recommendation = "Strong overlap. Tailor your strongest evidence to the most important requirements and keep the wording role-specific."
     elif score >= 60:
         recommendation = "Good overlap, but some important requirements are missing or underrepresented. Prioritize truthful evidence for the missing items."
@@ -170,8 +282,8 @@ def calculate_job_match(resume_text: str, job_description: str) -> Dict[str, obj
         "matched_general": matched_general,
         "missing_general": missing_general,
         "score_breakdown": {
-            "required_skills": {"score": round(required_score), "max": 70},
-            "preferred_skills": {"score": round(preferred_score), "max": 20},
-            "general_alignment": {"score": round(general_score), "max": 10},
+            "required_skills": {"score": integer_points["required_skills"], "max": integer_maxima["required_skills"]},
+            "preferred_skills": {"score": integer_points["preferred_skills"], "max": integer_maxima["preferred_skills"]},
+            "general_alignment": {"score": integer_points["general_alignment"], "max": integer_maxima["general_alignment"]},
         },
     }
