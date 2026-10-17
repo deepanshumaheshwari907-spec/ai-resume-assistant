@@ -29,9 +29,12 @@ node_modules/
 build/
 dist/
 
-# Local backup snapshots
-*backup*/
-*backup*
-*.backup.*
-*.backup-*
+# Local backup snapshots (keep recovery copies out of source control)
+/backend/*backup*
+/backend/*.backup-*
+/backend/*.backup.*
+/frontend/src/**/*.backup-*
+/frontend/src/**/*.backup.*
 *.bak
+*.log
+.vercel/
