@@ -8,7 +8,7 @@ const contactDedupeKey = (value) => normalize(value)
   .toLocaleLowerCase()
   .replace(/^https?:\/\//, "")
   .replace(/^www\./, "")
-  .replace(/[\/\\ \t]+$/g, "");
+  .replace(/[/\\ \t]+$/g, "");
 const normalizeEducationDetail = (value) => {
   const text = normalize(value);
   return /^coursework\s*:/i.test(text)
@@ -573,4 +573,3 @@ export function downloadTailoredResumePdf(value, targetRole = "Tailored Resume")
     `ResumeAI-${safeRole || "tailored-resume"}.pdf`,
   );
 }
-
