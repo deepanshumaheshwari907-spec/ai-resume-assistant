@@ -33,6 +33,7 @@ import secrets
 import hmac
 
 import hashlib
+import html as html_lib
 
 from datetime import datetime, timedelta
 
@@ -148,6 +149,58 @@ def record_opportunity_activity(
 
 
 
+def _build_auth_otp_email(purpose: str, otp_code: str):
+    """Build consistent plain-text and HTML content for authentication OTP email."""
+    if purpose == "signup":
+        context_label = "ACCOUNT VERIFICATION"
+        heading = "Verify your email"
+        intro = "Use this one-time code to verify your email and activate your ResumeAI account."
+        security_note = "If you did not try to create an account, you can safely ignore this email."
+    elif purpose == "password_reset":
+        context_label = "ACCOUNT SECURITY"
+        heading = "Reset your password"
+        intro = "Use this one-time code to continue resetting the password for your ResumeAI account."
+        security_note = "If you did not request a password reset, you can safely ignore this email."
+    else:
+        raise ValueError("Unsupported authentication email purpose.")
+
+    expiry_minutes = max(1, (OTP_TTL_SECONDS + 59) // 60)
+    safe_code = html_lib.escape(str(otp_code))
+    plain_text = (
+        f"ResumeAI - {heading}\n\n"
+        f"{intro}\n\n"
+        f"Your one-time code: {otp_code}\n"
+        f"This code expires in {expiry_minutes} minutes.\n\n"
+        f"Never share this code with anyone. {security_note}\n"
+    )
+    html_body = f"""<!doctype html>
+<html lang="en">
+  <body style="margin:0;padding:0;background-color:#f1f2f5;">
+    <div style="padding:28px 12px;font-family:Arial,Helvetica,sans-serif;color:#f6f7f9;">
+      <div style="max-width:560px;margin:0 auto;background:#0a0b10;border:1px solid #272a33;border-radius:16px;overflow:hidden;">
+        <div style="height:4px;background:#e0231c;font-size:0;line-height:0;">&nbsp;</div>
+        <div style="padding:28px;">
+          <div style="font-size:26px;font-weight:800;letter-spacing:-0.8px;margin-bottom:24px;color:#ffffff;">Resume<span style="color:#e0231c;">AI</span></div>
+          <div style="font-size:11px;font-weight:700;letter-spacing:1.8px;color:#9ca3af;margin-bottom:10px;">{context_label}</div>
+          <h1 style="font-size:28px;line-height:1.2;margin:0 0 12px;color:#ffffff;">{heading}</h1>
+          <p style="font-size:15px;line-height:1.65;color:#b9bec8;margin:0 0 24px;">{intro}</p>
+          <div style="background:#11131a;border:1px solid #30343d;border-radius:14px;padding:20px 16px;margin:0 0 20px;text-align:center;">
+            <div style="font-size:10px;font-weight:700;letter-spacing:1.8px;color:#9299a6;margin-bottom:12px;">YOUR ONE-TIME CODE</div>
+            <div style="font-size:32px;font-weight:800;letter-spacing:8px;color:#ffffff;">{safe_code}</div>
+          </div>
+          <p style="font-size:13px;line-height:1.6;color:#a2a8b4;margin:0 0 10px;">This code expires in <strong style="color:#f6f7f9;">{expiry_minutes} minutes</strong>.</p>
+          <p style="font-size:13px;line-height:1.65;color:#a2a8b4;margin:0;">Never share this code with anyone. {security_note}</p>
+          <div style="margin-top:28px;padding-top:16px;border-top:1px solid #272a33;font-size:12px;line-height:1.6;color:#747b87;">&copy; {datetime.now().year} ResumeAI <span style="padding:0 5px;">&bull;</span> Secure account access</div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+"""
+    return plain_text, html_body
+
+
+
 def send_otp_email(target_email: str, otp_code: str):
 
     """Send a verification code only through configured SMTP.
@@ -174,27 +227,12 @@ def send_otp_email(target_email: str, otp_code: str):
 
     msg["Subject"] = "Your ResumeAI verification code"
 
-    msg["From"] = GMAIL_USER
-
+    msg["From"] = f"ResumeAI <{GMAIL_USER}>"
     msg["To"] = target_email
 
-    html = f"""
-
-    <div style="font-family:Arial,sans-serif;background:#0a0b10;color:#fff;padding:32px;max-width:560px;margin:auto;border:1px solid #232632;border-radius:16px;">
-
-      <div style="font-size:26px;font-weight:800;letter-spacing:-0.03em;">Resume<span style="color:#e0231c;">AI</span></div>
-
-      <p style="color:#b8bcc6;font-size:14px;line-height:1.6;">Use the verification code below to activate your ResumeAI workspace.</p>
-
-      <div style="font-size:34px;font-weight:800;letter-spacing:8px;text-align:center;padding:18px 12px;margin:24px 0;background:#11131a;border:1px solid #2a2d36;border-radius:12px;color:#fff;">{otp_code}</div>
-
-      <p style="color:#838894;font-size:12px;line-height:1.6;">This code expires in {int(OTP_TTL_SECONDS/60)} minutes. Never share this code with anyone.</p>
-
-    </div>
-
-    """
-
-    msg.attach(MIMEText(html, "html"))
+    plain_text, html = _build_auth_otp_email("signup", otp_code)
+    msg.attach(MIMEText(plain_text, "plain", "utf-8"))
+    msg.attach(MIMEText(html, "html", "utf-8"))
 
     try:
 
@@ -742,35 +780,9 @@ def send_password_reset_email(target_email: str, otp_code: str) -> None:
 
     msg["To"] = target_email
 
-    html = f"""
-
-    <div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:36px 28px;background:#090a0d;color:#f6f7f9;border:1px solid #23262d;border-radius:18px;text-align:left">
-
-      <div style="font-size:26px;font-weight:800;letter-spacing:-0.8px;margin-bottom:22px">Resume<span style="color:#ff6b35">AI</span></div>
-
-      <div style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#8d94a1;margin-bottom:10px">SECURITY</div>
-
-      <h1 style="font-size:28px;line-height:1.15;margin:0 0 12px">Reset your password</h1>
-
-      <p style="font-size:15px;line-height:1.65;color:#b9bec8;margin:0 0 24px">Use the verification code below to create a new password for your ResumeAI account.</p>
-
-      <div style="background:#11141a;border:1px solid #30343d;border-radius:14px;padding:20px 18px;margin:0 0 22px;text-align:center">
-
-        <div style="font-size:34px;font-weight:800;letter-spacing:8px;color:#ffffff">{otp_code}</div>
-
-      </div>
-
-      <p style="font-size:13px;line-height:1.55;color:#8d94a1;margin:0 0 8px">This code expires in {int(OTP_TTL_SECONDS / 60)} minutes.</p>
-
-      <p style="font-size:13px;line-height:1.55;color:#8d94a1;margin:0">Never share this code with anyone. If you did not request a password reset, you can safely ignore this email.</p>
-
-      <div style="margin-top:28px;padding-top:16px;border-top:1px solid #23262d;font-size:12px;color:#646b76">© 2026 ResumeAI</div>
-
-    </div>
-
-    """
-
-    msg.attach(MIMEText(html, "html"))
+    plain_text, html = _build_auth_otp_email("password_reset", otp_code)
+    msg.attach(MIMEText(plain_text, "plain", "utf-8"))
+    msg.attach(MIMEText(html, "html", "utf-8"))
 
     try:
 
@@ -838,7 +850,11 @@ def forgot_password(data: PasswordResetRequest, db: Session = Depends(get_db)):
 
             send_password_reset_email(email, otp_code)
 
-        except RuntimeError:
+        except RuntimeError as exc:
+
+            cause = exc.__cause__
+            failure_type = type(cause).__name__ if cause is not None else type(exc).__name__
+            print(f"Password reset email delivery failed: {failure_type}")
 
             return {"message": "If an account exists for this email, a password reset code has been sent."}
 
