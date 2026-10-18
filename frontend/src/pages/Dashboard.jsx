@@ -173,9 +173,7 @@ export default function Dashboard() {
   const scoreTone = getScoreTone(score);
   const scoreLabel = getScoreLabel(score);
 
-  const analysesUsed = Number(user?.usage_count ?? 0);
-  const analysesLimit = Number(user?.analysis_limit ?? 20);
-  const usagePercent = analysesLimit > 0 ? Math.min(100, (analysesUsed / analysesLimit) * 100) : 0;
+
 
   const selectedResumeName = file?.name || storedResume?.filename || "No resume selected";
   const hasResume = Boolean(file || storedResume);
@@ -2639,4 +2637,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
