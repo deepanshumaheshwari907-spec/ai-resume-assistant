@@ -1,471 +1,131 @@
-import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import React, { useState } from "react";
+import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
+import { GoogleLogin } from "@react-oauth/google";
+import axios from "axios";
+import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import api from "../utils/api";
-import { Mail, Lock, ShieldCheck, ArrowRight } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import AuthLayout from "../components/AuthLayout";
+import "./AuthPages.css";
+
+function Input({ icon: Icon, label, value, onChange, placeholder, type = "text", autoComplete, action }) {
+  return (
+    <label className="auth-field">
+      <span>{label}</span>
+      <div className="auth-input-wrap">
+        <Icon size={16} strokeWidth={1.7} />
+        <input type={type} value={value} onChange={onChange} placeholder={placeholder} autoComplete={autoComplete} />
+        {action}
+      </div>
+    </label>
+  );
+}
 
 export default function Login() {
+  const navigate = useNavigate();
+  const { login, googleLogin } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
-  const [otp, setOtp] = useState("");
-  const [showOtpScreen, setShowOtpScreen] = useState(false);
-
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [otpLoading, setOtpLoading] = useState(false);
 
-  const { login } = useAuth();
-  const navigate = useNavigate();
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-
-    if (!email.trim() || !password) {
-      toast.error("Please fill all fields");
-      return;
-    }
-
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (!email.trim() || !password) return toast.error("Enter your email and password.");
     setLoading(true);
-
     try {
-      // Normal login through AuthContext
       await login(email.trim(), password);
-
-      toast.success("Welcome back! 🎉");
+      toast.success("Welcome back to ResumeAI.");
       navigate("/dashboard", { replace: true });
     } catch (err) {
-      const status = err.response?.status;
-      const detail = err.response?.data?.detail;
-
-      // Backend tells us user needs email verification.
-      if (
-        status === 403 &&
-        typeof detail === "string" &&
-        detail.toLowerCase().includes("email verification required")
-      ) {
-        setShowOtpScreen(true);
-        toast.success(
-          "A new verification code has been sent to your email."
-        );
-        return;
+      const detail = err?.response?.data?.detail || "Invalid email or password.";
+      if (err?.response?.status === 403 && /verification|required/i.test(String(detail))) {
+        toast.error("Email verification required. We sent you a new code.");
+        navigate(`/signup?verify=1&email=${encodeURIComponent(email.trim())}`, { replace: true });
+      } else {
+        toast.error(detail);
       }
-
-      toast.error(detail || "Invalid email or password");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOtpVerify = async (e) => {
-    e.preventDefault();
-
-    if (otp.length !== 6) {
-      toast.error("Please enter the 6-digit verification code");
-      return;
-    }
-
-    setOtpLoading(true);
-
+  const handleGoogleSuccess = async (credentialResponse) => {
+    if (!credentialResponse?.credential) return toast.error("Google Sign-In did not return a credential.");
+    setLoading(true);
     try {
-      const res = await api.post("/auth/verify-otp", {
-        email: email.trim(),
-        otp,
-      });
-
-      // Save authenticated session
-      localStorage.setItem("token", res.data.token);
-      localStorage.setItem("user", JSON.stringify(res.data.user));
-
-      toast.success("Email verified successfully! 🎉");
-
-      // Hard navigation reloads AuthContext with the new stored user.
-      window.location.href = "/dashboard";
+      const apiBase = process.env.REACT_APP_API_URL || "http://127.0.0.1:8000";
+      const res = await axios.post(`${apiBase}/auth/google`, { token: credentialResponse.credential });
+      googleLogin(res.data.token, res.data.user);
+      toast.success("Google sign-in successful.");
+      navigate("/dashboard", { replace: true });
     } catch (err) {
-      toast.error(
-        err.response?.data?.detail ||
-          "Invalid or expired verification code"
-      );
+      console.error("Google Auth Error:", err);
+      toast.error(err?.response?.data?.detail || "Google sign-in failed.");
     } finally {
-      setOtpLoading(false);
+      setLoading(false);
     }
-  };
-
-  const goBackToLogin = () => {
-    setShowOtpScreen(false);
-    setOtp("");
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#080810",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 20,
-        fontFamily: "'Segoe UI', system-ui, sans-serif",
-        color: "#fff",
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 420,
-          background: "rgba(255,255,255,0.02)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          borderRadius: 22,
-          padding: "42px 38px",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
-        }}
-      >
-        {/* Logo */}
-        <div style={{ textAlign: "center", marginBottom: 30 }}>
-          <div
-            style={{
-              fontSize: 28,
-              fontWeight: 900,
-              letterSpacing: "-0.5px",
-            }}
-          >
-            Resume<span style={{ color: "#F59E0B" }}>AI</span>
-          </div>
+    <AuthLayout mode="login">
+      <div className="auth-form-head">
+        <span className="auth-form-kicker">01 / RETURN TO WORKSPACE</span>
+        <h2>Welcome back.</h2>
+        <p>Sign in to continue building your next application.</p>
+      </div>
 
-          <div
-            style={{
-              fontSize: 13,
-              color: "#555",
-              marginTop: 5,
-            }}
-          >
-            AI-Powered Resume Assistant
+      <form className="auth-form" onSubmit={handleSubmit}>
+        <Input icon={Mail} label="EMAIL ADDRESS" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" />
+        <Input
+          icon={LockKeyhole}
+          label="PASSWORD"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Your password"
+          type={showPassword ? "text" : "password"}
+          autoComplete="current-password"
+          action={(
+            <button className="auth-field-action" type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Hide password" : "Show password"}>
+              {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+            </button>
+          )}
+        />
+
+        <div className="auth-password-row">
+          <div className="auth-form-meta">
+            <span><ShieldCheck size={12} /> Secure workspace access</span>
+            <span>JWT SESSION</span>
           </div>
+          <Link className="auth-forgot-link" to="/forgot-password">Forgot password?</Link>
         </div>
 
-        {!showOtpScreen ? (
-          <>
-            <h2
-              style={{
-                fontSize: 22,
-                fontWeight: 800,
-                margin: "0 0 7px",
-              }}
-            >
-              Welcome back 👋
-            </h2>
+        <button className="auth-submit" type="submit" disabled={loading}>
+          <span>{loading ? "Signing you in…" : "Continue to workspace"}</span>
+          <ArrowRight size={16} />
+        </button>
+      </form>
 
-            <p
-              style={{
-                color: "#666",
-                fontSize: 14,
-                margin: "0 0 28px",
-              }}
-            >
-              Login to continue improving your resume
-            </p>
+      <div className="auth-divider"><span>OR</span></div>
 
-            <form onSubmit={handleLogin}>
-              {/* Email */}
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 13,
-                  color: "#888",
-                  marginBottom: 7,
-                }}
-              >
-                Email Address
-              </label>
-
-              <div style={{ position: "relative", marginBottom: 18 }}>
-                <Mail
-                  size={17}
-                  style={{
-                    position: "absolute",
-                    left: 14,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    color: "#555",
-                  }}
-                />
-
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@email.com"
-                  autoComplete="email"
-                  style={{
-                    width: "100%",
-                    padding: "13px 14px 13px 43px",
-                    borderRadius: 11,
-                    background: "rgba(255,255,255,0.04)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    color: "#fff",
-                    fontSize: 14,
-                    outline: "none",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
-              {/* Password */}
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 13,
-                  color: "#888",
-                  marginBottom: 7,
-                }}
-              >
-                ResumeAI Password
-              </label>
-
-              <div style={{ position: "relative", marginBottom: 24 }}>
-                <Lock
-                  size={17}
-                  style={{
-                    position: "absolute",
-                    left: 14,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    color: "#555",
-                  }}
-                />
-
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  autoComplete="current-password"
-                  style={{
-                    width: "100%",
-                    padding: "13px 14px 13px 43px",
-                    borderRadius: 11,
-                    background: "rgba(255,255,255,0.04)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    color: "#fff",
-                    fontSize: 14,
-                    outline: "none",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                style={{
-                  width: "100%",
-                  padding: 14,
-                  borderRadius: 11,
-                  border: "none",
-                  background: loading
-                    ? "#333"
-                    : "linear-gradient(135deg,#F59E0B,#F97316)",
-                  color: loading ? "#666" : "#000",
-                  fontWeight: 800,
-                  fontSize: 15,
-                  cursor: loading ? "not-allowed" : "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                  boxShadow: loading
-                    ? "none"
-                    : "0 4px 20px rgba(245,158,11,0.25)",
-                }}
-              >
-                {loading ? "Signing in..." : "Login to Dashboard"}
-                <ArrowRight size={17} />
-              </button>
-            </form>
-
-            <div
-              style={{
-                textAlign: "center",
-                marginTop: 25,
-                fontSize: 14,
-                color: "#555",
-              }}
-            >
-              No account?{" "}
-              <Link
-                to="/signup"
-                style={{
-                  color: "#F59E0B",
-                  textDecoration: "none",
-                  fontWeight: 700,
-                }}
-              >
-                Sign up free
-              </Link>
-            </div>
-
-            <div
-              style={{
-                textAlign: "center",
-                marginTop: 14,
-              }}
-            >
-              <Link
-                to="/"
-                style={{
-                  color: "#444",
-                  textDecoration: "none",
-                  fontSize: 13,
-                }}
-              >
-                ← Back to home
-              </Link>
-            </div>
-          </>
-        ) : (
-          <>
-            {/* OTP Screen */}
-            <div style={{ textAlign: "center", marginBottom: 25 }}>
-              <div
-                style={{
-                  width: 52,
-                  height: 52,
-                  margin: "0 auto 16px",
-                  borderRadius: "50%",
-                  background: "rgba(245,158,11,0.10)",
-                  border: "1px solid rgba(245,158,11,0.20)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <ShieldCheck size={25} color="#F59E0B" />
-              </div>
-
-              <h2
-                style={{
-                  fontSize: 22,
-                  fontWeight: 800,
-                  margin: "0 0 8px",
-                }}
-              >
-                Verify your email
-              </h2>
-
-              <p
-                style={{
-                  color: "#666",
-                  fontSize: 14,
-                  lineHeight: 1.55,
-                  margin: 0,
-                }}
-              >
-                We sent a 6-digit verification code to
-              </p>
-
-              <div
-                style={{
-                  marginTop: 7,
-                  color: "#F59E0B",
-                  fontSize: 14,
-                  fontWeight: 700,
-                  wordBreak: "break-all",
-                }}
-              >
-                {email}
-              </div>
-            </div>
-
-            <form onSubmit={handleOtpVerify}>
-              <label
-                style={{
-                  display: "block",
-                  textAlign: "center",
-                  fontSize: 12,
-                  color: "#888",
-                  marginBottom: 9,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                }}
-              >
-                Verification Code
-              </label>
-
-              <input
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                value={otp}
-                onChange={(e) =>
-                  setOtp(e.target.value.replace(/\D/g, ""))
-                }
-                placeholder="123456"
-                autoFocus
-                style={{
-                  width: "100%",
-                  padding: "15px",
-                  borderRadius: 11,
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(245,158,11,0.25)",
-                  color: "#fff",
-                  fontSize: 22,
-                  fontWeight: 800,
-                  letterSpacing: "8px",
-                  textAlign: "center",
-                  outline: "none",
-                  boxSizing: "border-box",
-                }}
-              />
-
-              <button
-                type="submit"
-                disabled={otpLoading}
-                style={{
-                  width: "100%",
-                  marginTop: 18,
-                  padding: 14,
-                  borderRadius: 11,
-                  border: "none",
-                  background: otpLoading
-                    ? "#333"
-                    : "linear-gradient(135deg,#F59E0B,#F97316)",
-                  color: otpLoading ? "#666" : "#000",
-                  fontWeight: 800,
-                  fontSize: 15,
-                  cursor: otpLoading ? "not-allowed" : "pointer",
-                }}
-              >
-                {otpLoading
-                  ? "Verifying..."
-                  : "Verify & Continue →"}
-              </button>
-            </form>
-
-            <div
-              style={{
-                textAlign: "center",
-                marginTop: 20,
-              }}
-            >
-              <button
-                type="button"
-                onClick={goBackToLogin}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "#666",
-                  cursor: "pointer",
-                  fontSize: 13,
-                  textDecoration: "underline",
-                }}
-              >
-                ← Back to login
-              </button>
-            </div>
-          </>
-        )}
+      <div className="google-wrap">
+        <GoogleLogin
+          onSuccess={handleGoogleSuccess}
+          onError={() => toast.error("Google Sign-In failed.")}
+          theme="outline"
+          shape="rectangular"
+          width="400"
+          text="continue_with"
+          size="large"
+        />
       </div>
-    </div>
+
+      <div className="auth-switch">
+        <span>New to ResumeAI?</span>
+        <Link to="/signup">Create your workspace <ArrowRight size={13} /></Link>
+      </div>
+
+      <div className="auth-footnote">By continuing, you agree to use ResumeAI as an application workspace and keep your submitted information accurate.</div>
+    </AuthLayout>
   );
 }

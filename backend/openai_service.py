@@ -22,8 +22,6 @@ from typing import Any, Dict, Type
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
-from ats_engine import calculate_ats_score
-from jd_match_engine_v2 import calculate_job_match
 
 load_dotenv()
 
@@ -134,6 +132,7 @@ class TailoredResumeResponse(BaseModel):
     projects: list[ResumeProjectItem] = Field(default_factory=list)
     education: list[ResumeEducationItem] = Field(default_factory=list)
     certifications: list[str] = Field(default_factory=list)
+    key_strengths: list[str] = Field(default_factory=list)
     achievements: list[str] = Field(default_factory=list)
 
 
@@ -272,8 +271,111 @@ def _text_generation(
     return text
 
 
+# RESUMEAI_FACT_GROUNDING_GUARD_V1
+# These are material deliverable/capability/outcome terms that should not be
+# introduced into a bullet unless supported by the supplied resume. This guard
+# complements the prompt; it is intentionally conservative and only checks
+# improved bullets, not general recommendations about skills to learn.
+_FACTUAL_CLAIM_PHRASES = (
+    "dashboard", "dashboards", "interactive", "deployed", "deployment",
+    "production-ready", "production ready", "real-time", "real time",
+    "scalable", "scalability", "automated", "automation", "cloud-based",
+    "cloud based", "mobile app", "mobile application", "live monitoring",
+    "structured reporting", "business intelligence", "predictive analytics",
+    "enterprise-grade", "enterprise grade", "high-performance",
+    "high performance", "optimized", "optimised", "streamlined",
+    "accelerated", "reduced", "increased", "boosted", "saved time",
+    "cut by", "improved by", "launched", "production deployment",
+)
+
+
+def _normalize_fact_check_text(value: str) -> str:
+    """Normalize punctuation and whitespace for conservative source matching."""
+    return re.sub(r"[^a-z0-9%+]+", " ", (value or "").lower()).strip()
+
+
+def _source_bullet_is_present(original: str, resume_text: str) -> bool:
+    """Require the model's quoted original bullet to exist in the input resume."""
+    original_norm = _normalize_fact_check_text(original)
+    resume_norm = _normalize_fact_check_text(resume_text)
+    # Avoid accepting a short, generic phrase as proof that the bullet is sourced.
+    return len(original_norm) >= 24 and original_norm in resume_norm
+
+
+def _has_unsupported_bullet_claim(original: str, improved: str) -> bool:
+    """Return True when a rewrite adds a high-impact claim absent from its source."""
+    original_norm = _normalize_fact_check_text(original)
+    improved_norm = _normalize_fact_check_text(improved)
+
+    # Do not transfer a metric from another project/bullet. Numeric claims must
+    # already be present in the specific source bullet being rewritten.
+    number_pattern = re.compile(r"(?<![a-z0-9])\d+(?:\.\d+)?\s*(?:%|percent)?(?![a-z0-9])", re.I)
+    source_numbers = {re.sub(r"\s+", "", item.lower()) for item in number_pattern.findall(original)}
+    improved_numbers = {re.sub(r"\s+", "", item.lower()) for item in number_pattern.findall(improved)}
+    if improved_numbers - source_numbers:
+        return True
+
+    # Material artifacts, delivery state, and measured-outcome phrases must be
+    # supported by the same source bullet. This prevents evidence from a different
+    # resume section/project being accidentally transferred into this bullet.
+    for phrase in _FACTUAL_CLAIM_PHRASES:
+        phrase_norm = _normalize_fact_check_text(phrase)
+        if phrase_norm and phrase_norm in improved_norm:
+            if phrase_norm not in original_norm:
+                return True
+    return False
+
+
+def _guard_improved_bullets(result: Dict[str, Any], resume_text: str) -> Dict[str, Any]:
+    """Remove ungrounded source bullets and hold unsupported rewrites unchanged."""
+    bullets = result.get("improved_bullets", [])
+    if not isinstance(bullets, list):
+        return result
+
+    verified_bullets = []
+    skipped_unverified = 0
+    guarded_count = 0
+    for bullet in bullets:
+        if not isinstance(bullet, dict):
+            continue
+        original = str(bullet.get("original") or "").strip()
+        improved = str(bullet.get("improved") or "").strip()
+        if not original or not improved or not _source_bullet_is_present(original, resume_text):
+            skipped_unverified += 1
+            continue
+        if _has_unsupported_bullet_claim(original, improved):
+            bullet["improved"] = original
+            guarded_count += 1
+        verified_bullets.append(bullet)
+
+    result["improved_bullets"] = verified_bullets
+    if guarded_count or skipped_unverified:
+        parts = []
+        if guarded_count:
+            parts.append(
+                f"{guarded_count} suggested bullet rewrite(s) were kept unchanged because "
+                "they introduced a material claim not present in that source bullet"
+            )
+        if skipped_unverified:
+            parts.append(
+                f"{skipped_unverified} suggested bullet rewrite(s) were omitted because "
+                "their quoted original could not be verified in the uploaded resume text"
+            )
+        note = ". ".join(parts) + ". Review the source resume and add details only if they accurately describe your work."
+        current = result.get("improvements", [])
+        if not isinstance(current, list):
+            current = []
+        if note not in current:
+            current.append(note)
+        result["improvements"] = current
+    return result
+
+
 def analyze_resume(resume_text: str, job_role: str) -> Dict[str, Any]:
     """Analyze a resume using deterministic scoring + LLM explanations."""
+    # Lazy import prevents an engine-to-service import cycle from breaking API startup.
+    from ats_engine import calculate_ats_score
+
     deterministic = calculate_ats_score(resume_text, job_role)
 
     system = """You are ResumeAI's ATS explanation engine.
@@ -290,7 +392,16 @@ Return valid JSON only with these fields:
 - ats_issues: array of ATS readability/format issues
 - score_breakdown: object
 - matched_keywords: array
-For improved bullets, preserve the candidate's facts and never manufacture metrics.
+STRICT FACTUAL GROUNDING FOR IMPROVED BULLETS:
+- Rewrite each bullet using ONLY facts from that same original bullet and its clearly relevant resume context.
+- Preserve the original deliverable/artifact, method, scope, ownership, and stated outcome.
+- Never replace one artifact with a different one (for example, heatmaps must not become dashboards).
+- Do not add capabilities such as interactivity, deployment, production use, automation, real-time behavior, scale, or measured improvements unless the resume explicitly supports that exact claim.
+- Do not add new numbers, percentages, dates, performance results, tools, or technologies that are not supported by the resume.
+- Prefer a conservative rewrite over a more impressive but inferred claim. If support is uncertain, keep the original wording unchanged.
+- The `original` field must quote the full candidate source bullet as it appears in the resume, aside from ordinary whitespace/punctuation normalization.
+- The `improved` field may clarify wording, grammar, and structure, but may not expand the facts. A post-processing guard will discard unverified originals and reject unsupported claims.
+The response schema above is mandatory.
 """
 
     user = f"""TARGET ROLE:
@@ -330,11 +441,18 @@ matched_keywords, or missing_keywords supplied above.
     result["matched_keywords"] = deterministic["matched_keywords"]
     result["missing_keywords"] = deterministic["missing_keywords"]
 
+    # Guard generated bullet edits against unsupported facts after structured
+    # output validation. The deterministic score remains unchanged.
+    result = _guard_improved_bullets(result, resume_text)
+
     return result
 
 
 def match_job(resume_text: str, job_description: str) -> Dict[str, Any]:
     """Calculate a reproducible JD match score, then use the LLM only for wording."""
+    # Lazy import prevents an engine-to-service import cycle from breaking API startup.
+    from jd_match_engine_v2 import calculate_job_match
+
     deterministic = calculate_job_match(resume_text, job_description)
 
     system = """You are ResumeAI's job-match explanation engine.
@@ -387,29 +505,18 @@ Write only a concise explanation. Do not modify any supplied score or keyword ev
 
 
 def rewrite_resume(resume_text: str, job_role: str) -> str:
-    system = """You are ResumeAI's professional resume rewriting engine.
-Rewrite only from information present in the supplied resume.
-Never fabricate metrics, employers, dates, technologies, education, awards, or achievements.
-Where a metric is absent, improve wording without inventing a number.
-Use ATS-friendly plain text with these sections where applicable:
-SUMMARY, SKILLS, EXPERIENCE, PROJECTS, EDUCATION, CERTIFICATIONS, ACHIEVEMENTS.
-Use strong action verbs and concise bullets.
-"""
+    """Build a structured, role-tailored resume while preserving the legacy API type.
 
-    user = f"""TARGET ROLE: {job_role}
+    The /rewrite route historically returns a string in ``rewritten_resume``.
+    Return serialized canonical JSON so existing callers remain compatible, while
+    the frontend can parse it into a fully formatted resume model for preview/PDF.
+    """
+    role = re.sub(r"\s+", " ", (job_role or "Software Engineer")).strip()[:200]
+    if not role:
+        role = "Software Engineer"
 
-RESUME DATA:
----BEGIN RESUME---
-{resume_text[:50000]}
----END RESUME---
-
-Return only the rewritten resume text."""
-
-    return _text_generation(
-        system=system,
-        user=user,
-        max_output_tokens=5000,
-    )
+    structured_resume = tailor_resume(resume_text, role)
+    return json.dumps(structured_resume, ensure_ascii=False)
 
 
 def _gemini_json(
@@ -520,7 +627,15 @@ def _extract_resume_identity(resume_text: str) -> dict[str, list[str] | str]:
         r"(?<!\d)(?:\+?\d[\d\s().-]{7,}\d)(?!\d)",
         resume_text,
     )
-    urls = re.findall(r"https?://[^\s<>()]+", resume_text, flags=re.IGNORECASE)
+    urls = re.findall(r"https?://[^\s<>()|]+", resume_text, flags=re.IGNORECASE)
+    # Many student resumes omit the URL scheme in the LinkedIn/GitHub header.
+    # Capture these common profile URLs as well so the structured rewrite keeps them.
+    bare_profile_urls = re.findall(
+        r"(?<![A-Za-z0-9@])(?:www\.)?(?:linkedin\.com/(?:in|company)/[A-Za-z0-9._%/-]+|github\.com/[A-Za-z0-9._%/-]+)",
+        resume_text,
+        flags=re.IGNORECASE,
+    )
+    urls.extend(bare_profile_urls)
 
     clean_emails = list(dict.fromkeys(
         item.strip(".,;") for item in emails
@@ -737,6 +852,17 @@ def _normalize_projects(raw: Any) -> list[dict[str, Any]]:
     ]
 
 
+def _is_placeholder_value(value: Any) -> bool:
+    text = _clean_text(value).strip(" .:-")
+    if not text:
+        return True
+    return bool(re.fullmatch(
+        r"(?i)(?:untitled|unknown|not specified|not provided|n/?a|none|null|"
+        r"education|degree|school|college|university|placeholder|tbd|to be decided)",
+        text,
+    ))
+
+
 def _normalize_education(raw: Any) -> list[dict[str, Any]]:
     items = raw if isinstance(raw, list) else ([raw] if raw else [])
     normalized = []
@@ -744,7 +870,7 @@ def _normalize_education(raw: Any) -> list[dict[str, Any]]:
     for item in items:
         if not isinstance(item, dict):
             text = _clean_text(item)
-            if text:
+            if not _is_placeholder_value(text):
                 normalized.append({
                     "degree": text,
                     "institution": "",
@@ -779,23 +905,278 @@ def _normalize_education(raw: Any) -> list[dict[str, Any]]:
                 values = _string_list(value)
                 label = _title_case_key(key)
                 for value_text in values:
-                    details.append(
-                        f"{label}: {value_text}" if label else value_text
-                    )
+                    details.append(f"{label}: {value_text}" if label else value_text)
         else:
             details = _string_list(details_raw)
 
-        normalized.append({
+        details = [value for value in details if not _is_placeholder_value(value)]
+        # Never render model placeholders such as "Untitled" as education records.
+        if _is_placeholder_value(degree):
+            degree = ""
+        if _is_placeholder_value(institution):
+            institution = ""
+        if _is_placeholder_value(dates):
+            dates = ""
+
+        record = {
             "degree": degree,
             "institution": institution,
             "dates": dates,
             "details": list(dict.fromkeys(details)),
-        })
+        }
+        if record["degree"] or record["institution"] or record["dates"] or record["details"]:
+            normalized.append(record)
 
-    return [
-        item for item in normalized
-        if item["degree"] or item["institution"] or item["details"]
-    ]
+    return normalized
+
+
+# Resume section extraction is deterministic and source-first. It prevents the model
+# from inventing education, certifications, or a generic soft-skills "achievements" list.
+_RESUME_SECTION_ALIASES = {
+    "projects": {"projects", "personal projects", "academic projects"},
+    "education": {
+        "education", "educational background", "academic background",
+        "education and qualifications", "qualifications", "academic qualifications",
+    },
+    "certifications": {
+        "certifications", "certification", "certifications and courses",
+        "certificates", "courses", "licenses and certifications",
+        "licenses and certificates", "professional development",
+    },
+    "key_strengths": {
+        "key strengths", "core strengths", "personal strengths", "professional strengths",
+        "soft skills", "core competencies",
+    },
+    "achievements": {
+        "achievements", "awards", "honors", "honours", "accomplishments",
+        "awards and honors", "awards and honours",
+    },
+}
+
+
+def _canonical_heading(line: str) -> str:
+    value = re.sub(r"^[\s#>*•▪◦·%¸\-]+", "", str(line or ""))
+    value = re.sub(r"[:：\s]+$", "", value).strip().lower()
+    value = re.sub(r"\s*&\s*", " and ", value)
+    value = re.sub(r"\s+", " ", value)
+    return value
+
+
+def _all_resume_headings() -> set[str]:
+    headings = {
+        "summary", "professional summary", "profile", "objective", "career objective",
+        "skills", "technical skills", "core skills", "key skills", "experience",
+        "work experience", "professional experience", "employment history",
+        "internships", "projects", "personal projects", "academic projects",
+        "education", "educational background", "academic background",
+        "education and qualifications", "qualifications", "academic qualifications",
+        "certifications", "certification", "certifications and courses", "certificates",
+        "courses", "licenses and certifications", "licenses and certificates",
+        "professional development", "achievements", "awards", "honors", "honours",
+        "accomplishments", "awards and honors", "awards and honours", "languages",
+        "interests", "publications", "volunteering", "volunteer experience",
+        "references", "technical proficiencies", "tools", "tools and technologies",
+    }
+    for values in _RESUME_SECTION_ALIASES.values():
+        headings.update(values)
+    return headings
+
+
+def _extract_source_section(
+    resume_text: str,
+    section_key: str,
+) -> tuple[bool, list[str]]:
+    target = _RESUME_SECTION_ALIASES[section_key]
+    all_headings = _all_resume_headings()
+    found = False
+    result: list[str] = []
+
+    for raw_line in (resume_text or "").splitlines():
+        raw = re.sub(r"\s+", " ", raw_line).strip()
+        if not raw:
+            continue
+        # Support both standalone headings and heading labels followed by content.
+        canonical = _canonical_heading(raw)
+        inline_content = ""
+        if canonical not in all_headings:
+            match = re.match(r"^\s*(?:#+\s*)?([^:]{2,45})\s*:\s*(.+)$", raw)
+            if match and _canonical_heading(match.group(1)) in target:
+                canonical = _canonical_heading(match.group(1))
+                inline_content = match.group(2).strip()
+
+        if canonical in target:
+            found = True
+            if inline_content:
+                result.append(inline_content)
+            continue
+        if found and canonical in all_headings:
+            break
+        if not found:
+            continue
+
+        cleaned = re.sub(r"^[\s%¸•*\-–—‣▪◦]+", "", raw).strip()
+        cleaned = re.sub(r"^\d+[.)]\s*", "", cleaned).strip()
+        if cleaned and not _is_placeholder_value(cleaned):
+            result.append(cleaned)
+
+    return found, result
+
+
+_DEGREE_LINE_RE = re.compile(
+    r"(?i)\b(?:bachelor(?:'s)?|b\.?\s*e\.?|b\.?\s*tech\.?|b\.?\s*sc\.?|beng|"
+    r"master(?:'s)?|m\.?\s*e\.?|m\.?\s*tech\.?|m\.?\s*sc\.?|meng|ph\.?\s*d\.?|"
+    r"doctorate|associate degree|diploma|high school|senior secondary|higher secondary|"
+    r"class\s*(?:x|xii|10|12)|10th|12th|undergraduate|postgraduate)\b"
+)
+_DATE_LINE_RE = re.compile(
+    r"(?i)(?:\b(?:19|20)\d{2}\b.*\b(?:19|20)\d{2}\b|\b(?:19|20)\d{2}\s*[-–—]\s*(?:present|current|now)\b)"
+)
+_INSTITUTION_RE = re.compile(r"(?i)\b(university|college|institute|school|academy|polytechnic)\b")
+
+
+def _extract_source_education(resume_text: str) -> list[dict[str, Any]]:
+    found, lines = _extract_source_section(resume_text, "education")
+    if not found or not lines:
+        return []
+
+    entries: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+
+    def flush() -> None:
+        nonlocal current
+        if not current:
+            return
+        current["details"] = list(dict.fromkeys(
+            item for item in current.get("details", []) if item and not _is_placeholder_value(item)
+        ))
+        if any(current.get(key) for key in ("degree", "institution", "dates", "details")):
+            entries.append(current)
+        current = None
+
+    def add_institution(value: str) -> None:
+        nonlocal current
+        value = re.sub(r"\s+", " ", value).strip(" |-–—,;")
+        if not value or _is_placeholder_value(value):
+            return
+        if current is None:
+            return
+        if not current.get("institution"):
+            current["institution"] = value
+        elif value.casefold() not in current["institution"].casefold():
+            # Wrapped institution/location lines may arrive after the first line
+            # has already lost its trailing comma during PDF text extraction.
+            current["institution"] = f"{current['institution'].rstrip(' ,—–-')}, {value}".strip(" ,")
+
+    def consume_metadata(segment: str) -> None:
+        """Split institution/location, CGPA, and dates from a wrapped education line."""
+        nonlocal current
+        segment = re.sub(r"\s+", " ", segment).strip(" |-–—,;")
+        if not segment or current is None:
+            return
+
+        date_match = _DATE_LINE_RE.search(segment)
+        if date_match:
+            before = segment[:date_match.start()].strip(" |-–—,;")
+            after = segment[date_match.end():].strip(" |-–—,;")
+            metric_match = re.search(r"(?i)\b(?:cgpa|gpa|grade|percentage|score)\s*:?", before)
+            if metric_match:
+                add_institution(before[:metric_match.start()])
+                metric = before[metric_match.start():].strip(" |-–—,;")
+                if metric:
+                    current["details"].append(metric)
+            elif before:
+                if _INSTITUTION_RE.search(before):
+                    add_institution(before)
+                elif current.get("institution") and not re.search(r"(?i)\b(?:coursework|relevant coursework)\b", before):
+                    add_institution(before)
+                else:
+                    current["details"].append(before)
+            current["dates"] = date_match.group(0).strip()
+            if after:
+                current["details"].append(after)
+            return
+
+        metric_match = re.search(r"(?i)\b(?:cgpa|gpa|grade|percentage|score)\s*:?", segment)
+        if metric_match:
+            add_institution(segment[:metric_match.start()])
+            metric = segment[metric_match.start():].strip(" |-–—,;")
+            if metric:
+                current["details"].append(metric)
+            return
+
+        if _INSTITUTION_RE.search(segment):
+            add_institution(segment)
+        elif re.match(r"(?i)^(?:relevant coursework|coursework|major|minor|honou?rs)\b", segment):
+            current["details"].append(segment)
+        elif current.get("institution") and current["institution"].rstrip().endswith((",", "—", "–", "-")):
+            add_institution(segment)
+        else:
+            details = current.setdefault("details", [])
+            if details and (details[-1].endswith(",") or not re.search(r"[.!?;:]$", details[-1])):
+                details[-1] = f"{details[-1]} {segment}".strip()
+            else:
+                details.append(segment)
+
+    for raw_line in lines:
+        line = re.sub(r"\s+", " ", raw_line).strip()
+        if not line or _is_placeholder_value(line):
+            continue
+        line = re.sub(r"^[\s%¸•*\-–—‣▪◦]+", "", line).strip()
+        if not line:
+            continue
+
+        if _DEGREE_LINE_RE.search(line):
+            flush()
+            # PDF text extraction may wrap degree, institution, CGPA, and dates
+            # across separate visual lines. Keep the first pipe-delimited field as
+            # the degree and parse every remaining field as source metadata.
+            parts = [part.strip() for part in re.split(r"\s*\|\s*", line) if part.strip()]
+            degree = parts[0] if parts else line
+            current = {"degree": degree, "institution": "", "dates": "", "details": []}
+            for part in parts[1:]:
+                consume_metadata(part)
+            # If no pipe-delimited date was found, also support a date embedded
+            # in the degree segment without throwing away institution information.
+            if not current.get("dates"):
+                date_match = _DATE_LINE_RE.search(degree)
+                if date_match:
+                    current["degree"] = (degree[:date_match.start()] + degree[date_match.end():]).strip(" |-–—,")
+                    current["dates"] = date_match.group(0).strip()
+            continue
+
+        if current is None:
+            if _INSTITUTION_RE.search(line) or _DATE_LINE_RE.search(line):
+                continue
+            current = {"degree": line, "institution": "", "dates": "", "details": []}
+            continue
+
+        consume_metadata(line)
+
+    flush()
+    return entries
+
+
+def _filter_grounded_document_items(items: list[str], source_text: str) -> list[str]:
+    # Only keep entries that are actually represented in the source section/text.
+    source_compact = re.sub(r"[^a-z0-9]+", " ", (source_text or "").lower()).strip()
+    kept = []
+    for item in items:
+        value = re.sub(r"[^a-z0-9]+", " ", item.lower()).strip()
+        if not value:
+            continue
+        if value in source_compact:
+            kept.append(item)
+            continue
+        # Require several meaningful words and every numeric claim to be grounded.
+        tokens = [token for token in value.split() if len(token) >= 4]
+        source_tokens = set(source_compact.split())
+        numbers = re.findall(r"\d+(?:\.\d+)?%?", item)
+        if numbers and not all(re.sub(r"%$", "", n) in source_compact for n in numbers):
+            continue
+        overlap = sum(token in source_tokens for token in set(tokens))
+        if len(set(tokens)) >= 4 and overlap >= min(4, len(set(tokens))):
+            kept.append(item)
+    return list(dict.fromkeys(kept))
 
 
 def _format_document_item(item: Any) -> str:
@@ -840,27 +1221,487 @@ def _normalize_document_items(raw: Any) -> list[str]:
     return list(dict.fromkeys(result))
 
 
+def _contact_dedupe_key(value: Any) -> str:
+    """Canonical key for duplicate contact URLs while preserving display text."""
+    key = _clean_text(value).strip()
+    key = re.sub(
+        r"(?i)^(?:email|e-mail|phone|mobile|tel|linkedin|github|portfolio|website)\s*:\s*",
+        "",
+        key,
+    ).strip().casefold()
+    key = re.sub(r"^https?://", "", key)
+    key = re.sub(r"^www\.", "", key)
+    return key.rstrip("/\\ \t")
+
+
+def _normalize_contact_values(raw: Any, location: str = "") -> list[str]:
+    """Split model-combined contact headers, remove repeated location, and dedupe."""
+    parts: list[str] = []
+    for value in _string_list(raw):
+        for part in re.split(r"\s*[|•·]\s*", value):
+            cleaned = _clean_text(part).strip(" |•·")
+            if not cleaned:
+                continue
+            # Remove a field label while retaining the actual value.
+            cleaned = re.sub(
+                r"(?i)^(?:email|e-mail|phone|mobile|tel|linkedin|github|portfolio|website)\s*:\s*",
+                "",
+                cleaned,
+            ).strip()
+            if cleaned:
+                parts.append(cleaned)
+
+    location_key = _clean_text(location).casefold().strip(" ,")
+    result: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        key = _contact_dedupe_key(part)
+        location_dedupe_key = _contact_dedupe_key(location_key)
+        if not key or (location_key and key.strip(" ,") == location_dedupe_key) or key in seen:
+            continue
+        result.append(part)
+        seen.add(key)
+    return result
+
+
+def _split_source_section_items(lines: list[str]) -> list[str]:
+    """Split source sections accidentally flattened into bullet-delimited lines.
+
+    PDF text extraction often returns wrapped list items as adjacent lines.
+    Split embedded bullet separators, then rejoin obvious wrapped fragments such
+    as ``Intro to Machine`` + ``Learning (Kaggle Learn)`` or ``NPTEL, IIT`` +
+    ``Ropar)`` without merging normal complete entries.
+    """
+    pieces: list[str] = []
+    for raw in lines or []:
+        cleaned = re.sub(r"^[\s%¸•*\-–—‣▪◦]+", "", _clean_text(raw)).strip()
+        if not cleaned or _is_placeholder_value(cleaned):
+            continue
+        for part in re.split(r"\s*[•·]\s*", cleaned):
+            part = re.sub(r"^[\s%¸•*\-–—‣▪◦]+", "", part).strip()
+            if part and not _is_placeholder_value(part):
+                pieces.append(part)
+
+    merged: list[str] = []
+    for piece in pieces:
+        if merged and re.search(
+            r"(?i)(?:\b(?:machine|iit|nptel|to|of|for|and|with|in|on|at|by|from|using|via)\s*|[,/(-])$",
+            merged[-1],
+        ):
+            merged[-1] = f"{merged[-1].rstrip()} {piece.lstrip()}".strip()
+        else:
+            merged.append(piece)
+
+    # Remove extraction artifacts where a section title leaked into its own list.
+    valid: list[str] = []
+    for item in merged:
+        if _canonical_heading(item) in _all_resume_headings():
+            continue
+        if item and item.casefold() not in {existing.casefold() for existing in valid}:
+            valid.append(item)
+    return valid
+
+
+# RESUMEAI_ROLE_TARGETING_GUARD_V1
+_ROLE_GOAL_SENTENCE_RE = re.compile(
+    r"(?i)\b(?:seeking|looking for|targeting|applying for|aiming for)\b"
+    r"[^.!?\n]*(?:\b(?:role|position|internship|opportunity|job|career)\b)"
+    r"[^.!?\n]*[.!?]?"
+)
+
+_ROLE_SKILL_EVIDENCE = {
+    "ml": [
+        ("Python", r"\bpython\b"),
+        ("Scikit-learn", r"\bscikit\s*[- ]?\s*learn\b|\bsklearn\b"),
+        ("supervised learning", r"\bsupervised\b"),
+        ("unsupervised learning", r"\bunsupervised\b"),
+        ("classification", r"\bclassification\b"),
+        ("regression", r"\bregression\b"),
+        ("feature engineering", r"\bfeature engineering\b"),
+        ("model evaluation", r"\b(?:cross-validation|roc[- ]?auc)\b|\b(?:trained|training|evaluated|evaluating)\b.{0,60}\bmodels?\b"),
+        ("Pandas", r"\bpandas\b"),
+        ("NumPy", r"\bnumpy\b"),
+        ("deep learning", r"\bdeep learning\b"),
+        ("clustering", r"\bclustering\b"),
+    ],
+    "analyst": [
+        ("Python", r"\bpython\b"),
+        ("SQL", r"\bsql\b"),
+        ("Pandas", r"\bpandas\b"),
+        ("exploratory data analysis", r"\bexploratory data analysis\b|\beda\b"),
+        ("data cleaning", r"\bdata cleaning\b|\bclean(?:ed|ing)? datasets?\b"),
+        ("statistical analysis", r"\bstatistical analysis\b|\bstatistics\b"),
+        ("data visualization", r"\bdata visualization\b|\bvisuali[sz]ations?\b"),
+        ("NumPy", r"\bnumpy\b"),
+        ("feature engineering", r"\bfeature engineering\b"),
+        ("data pipelines", r"\bdata pipelines?\b"),
+    ],
+    "ai": [
+        ("Python", r"\bpython\b"),
+        ("FastAPI", r"\bfastapi\b"),
+        ("REST APIs", r"\brest(?:ful)?\s+apis?\b"),
+        ("LLM applications", r"\bllm applications?\b|\blarge language models?\b"),
+        ("Generative AI", r"\bgenerative ai\b"),
+        ("structured JSON output", r"\bstructured json\b|\bjson-based results\b"),
+        ("NLP", r"\bnlp\b|\bnatural language processing\b"),
+        ("Gemini API", r"\bgemini api\b"),
+    ],
+    "software": [
+        ("Python", r"\bpython\b"),
+        ("REST APIs", r"\brest(?:ful)?\s+apis?\b|\brest api integration\b"),
+        ("React", r"\breact\b"),
+        ("Node.js", r"\bnode\.?js\b"),
+        ("FastAPI", r"\bfastapi\b"),
+        ("LLM-integrated applications", r"\bllm[- ]integrated\b|\blarge language models?\b"),
+        ("JSON data pipelines", r"\bjson[- ]based data pipelines?\b|\bjson parsing\b"),
+        ("Git and GitHub", r"\bgit\b.{0,8}\bgithub\b|\bgit and github\b"),
+    ],
+}
+
+
+def _display_target_role(job_role: str) -> str:
+    value = re.sub(r"\s+", " ", _clean_text(job_role))
+    if not value:
+        return "the selected role"
+    value = value.title()
+    value = re.sub(
+        r"(?i)\b(ai|ml|nlp|sql|api|ui|ux|qa|sre|llm|aws|gcp|hr)\b",
+        lambda match: match.group(1).upper(),
+        value,
+    )
+    return value.replace("Ai/Ml", "AI/ML").replace("Ui/Ux", "UI/UX")
+
+
+def _role_family(job_role: str) -> str:
+    role = _clean_text(job_role).casefold()
+    if re.search(r"\b(data analyst|business analyst|bi analyst|business intelligence)\b", role):
+        return "analyst"
+    if re.search(r"\b(ai engineer|artificial intelligence engineer|generative ai engineer|llm engineer)\b", role):
+        return "ai"
+    if re.search(r"\b(machine learning|ml engineer|ai/ml|artificial intelligence|data scientist|deep learning|machine-learning)\b", role):
+        return "ml"
+    if re.search(r"\b(software|full[ -]?stack|frontend|front-end|backend|back-end|web developer|python developer|application developer)\b", role):
+        return "software"
+    return "general"
+
+
+def _english_join(items: list[str]) -> str:
+    values = [item for item in items if item]
+    if not values:
+        return ""
+    if len(values) == 1:
+        return values[0]
+    if len(values) == 2:
+        return f"{values[0]} and {values[1]}"
+    return ", ".join(values[:-1]) + ", and " + values[-1]
+
+
+def _article_for_role(role: str) -> str:
+    value = _clean_text(role)
+    # Acronyms pronounced with a leading vowel sound need "an"; UI/UX is pronounced "you-eye".
+    if re.match(r"(?i)^(?:AI(?:/ML)?|ML|NLP|API|SRE|MBA|FBI|AWS)\b", value):
+        return "an"
+    first = value.split()[0].casefold() if value.split() else ""
+    if first.startswith(("ui/ux", "uni", "use", "user", "euro", "one")):
+        return "a"
+    if first.startswith(tuple("aeiou")):
+        return "an"
+    return "a"
+
+
+def _role_goal_sentence(job_role: str, resume_text: str) -> str:
+    display_role = _display_target_role(job_role)
+    family = _role_family(job_role)
+    text = (resume_text or "").casefold()
+    evidence = []
+    if family in _ROLE_SKILL_EVIDENCE:
+        for label, pattern in _ROLE_SKILL_EVIDENCE[family]:
+            if re.search(pattern, text, flags=re.IGNORECASE):
+                evidence.append(label)
+            if len(evidence) >= 6:
+                break
+
+    if evidence:
+        article = _article_for_role(display_role)
+        return (
+            f"Seeking {article} {display_role} position to apply my skills in "
+            f"{_english_join(evidence)} to practical, role-relevant problems."
+        )
+    article = _article_for_role(display_role)
+    return (
+        f"Seeking {article} {display_role} position where I can apply my existing "
+        "technical foundation and project experience."
+    )
+
+
+def _ensure_summary_targets_role(summary: str, job_role: str, resume_text: str) -> str:
+    """Replace any conflicting career-goal sentence with one for the selected role."""
+    value = _clean_text(summary)
+    # Always replace role-intent clauses rather than trusting an LLM not to keep
+    # an earlier target role from another resume version or prompt context.
+    value = _ROLE_GOAL_SENTENCE_RE.sub(" ", value)
+    value = re.sub(r"\s+", " ", value).strip(" \t\r\n.;,-")
+    if value and value[-1] not in ".!?":
+        value += "."
+    goal = _role_goal_sentence(job_role, resume_text)
+    return f"{value} {goal}".strip() if value else goal
+
+
+def _reorder_skills_for_role(skills: list[dict[str, Any]], job_role: str) -> list[dict[str, Any]]:
+    family = _role_family(job_role)
+    if family == "general" or not isinstance(skills, list):
+        return skills
+
+    def priority(item: dict[str, Any]) -> int:
+        category = _clean_text(item.get("category", "")).casefold()
+        if family == "ai":
+            ordered = [
+                (r"ml / ai|\bai\b|llm|generative", 0),
+                (r"backend|api|server|framework", 1),
+                (r"programming|database", 2),
+                (r"librar", 3),
+                (r"tool|cloud|platform", 4),
+                (r"data skill|data analy|statistic|visual|eda", 5),
+            ]
+        elif family == "ml":
+            ordered = [
+                (r"ai|machine|\bml\b|deep learning", 0),
+                (r"programming|database", 1),
+                (r"librar", 2),
+                (r"data skill|data analy|statistic|visual", 3),
+                (r"tool|cloud|platform", 4),
+                (r"full.?stack|agentic|web", 5),
+            ]
+        elif family == "analyst":
+            ordered = [
+                (r"data skill|data analy|statistic|visual|eda", 0),
+                (r"programming|database", 1),
+                (r"librar", 2),
+                (r"tool|cloud|platform", 3),
+                (r"ai|machine|\bml\b|deep learning", 4),
+                (r"full.?stack|agentic|web", 5),
+            ]
+        else:
+            ordered = [
+                (r"backend|api|server|framework", 0),
+                (r"full.?stack|agentic|web", 1),
+                (r"programming|database", 2),
+                (r"librar", 3),
+                (r"tool|cloud|platform", 4),
+                (r"ai|machine|\bml\b|deep learning", 5),
+                (r"data skill|data analy|statistic|visual|eda", 6),
+            ]
+        for pattern, weight in ordered:
+            if re.search(pattern, category):
+                return weight
+        return 6
+
+    return [item for _, item in sorted(enumerate(skills), key=lambda pair: (priority(pair[1]), pair[0]))]
+
+
+def _reorder_projects_for_role(projects: list[dict[str, Any]], job_role: str) -> list[dict[str, Any]]:
+    family = _role_family(job_role)
+    if family == "general" or not isinstance(projects, list):
+        return projects
+
+    terms_by_family = {
+        "ml": [
+            "machine learning", "supervised", "unsupervised", "classification", "regression",
+            "predict", "model", "scikit", "feature engineering", "cross-validation", "roc-auc",
+            "training", "accuracy", "deep learning", "clustering",
+        ],
+        "analyst": [
+            "data analysis", "eda", "data cleaning", "statistical", "visualization", "dataset",
+            "data pipeline", "report", "sql", "pandas", "correlation", "trend", "dashboard", "outlier",
+        ],
+        "ai": [
+            "resumeai", "llm", "generative ai", "gemini", "nlp", "prompt engineering",
+            "structured json", "api", "fastapi", "application", "natural language processing",
+        ],
+        "software": [
+            "web application", "api", "frontend", "backend", "react", "node.js", "fastapi",
+            "llm-integrated", "llm applications", "rest", "json", "agentic", "software", "application",
+        ],
+    }
+    terms = terms_by_family[family]
+
+    def score(project: dict[str, Any]) -> int:
+        evidence = " ".join([
+            _clean_text(project.get("name")),
+            " ".join(_string_list(project.get("technologies", []))),
+            " ".join(_string_list(project.get("bullets", []))),
+        ]).casefold()
+        return sum(1 for term in terms if term in evidence)
+
+    # Stable sorting preserves original order when relevance is tied.
+    return [item for _, item in sorted(enumerate(projects), key=lambda pair: (-score(pair[1]), pair[0]))]
+
+
+_PROJECT_MONTH = (
+    r"Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
+    r"Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|"
+    r"Nov(?:ember)?|Dec(?:ember)?"
+)
+_PROJECT_DATE_RANGE_RE = re.compile(
+    rf"(?i)(?:\b(?:{_PROJECT_MONTH})\.?\s+\d{{4}}\s*[-–—]\s*"
+    rf"(?:(?:{_PROJECT_MONTH})\.?\s+\d{{4}}|present|current|now)\b|"
+    r"\b(?:19|20)\d{2}\s*[-–—]\s*(?:(?:19|20)\d{2}|present|current|now)\b)"
+)
+
+
+def _source_project_dates(resume_text: str) -> list[tuple[str, str]]:
+    """Extract dates only when they are explicitly attached to source project entries."""
+    found, lines = _extract_source_section(resume_text, "projects")
+    if not found:
+        return []
+
+    records: list[tuple[str, str]] = []
+    pending_title = ""
+    for raw_line in lines:
+        line = re.sub(r"\s+", " ", str(raw_line or "")).strip()
+        if not line:
+            continue
+        if re.match(r"(?i)^(?:technologies|technology|tech stack)\s*:", line):
+            continue
+        if re.match(r"^[-•*]\s*", line):
+            continue
+
+        date_match = _PROJECT_DATE_RANGE_RE.search(line)
+        if date_match:
+            title = line[:date_match.start()].strip(" |•·—–-,:;") or pending_title
+            date_value = date_match.group(0).strip(" |•·—–-,:;")
+            if title and date_value:
+                records.append((title, date_value))
+            pending_title = ""
+        else:
+            # Supports PDFs where the date range was extracted onto a separate line.
+            if _canonical_heading(line) not in _all_resume_headings():
+                pending_title = line
+    return records
+
+
+def _project_match_score(left: str, right: str) -> float:
+    left_norm = re.sub(r"[^a-z0-9]+", " ", (left or "").casefold()).strip()
+    right_norm = re.sub(r"[^a-z0-9]+", " ", (right or "").casefold()).strip()
+    if not left_norm or not right_norm:
+        return 0.0
+    if left_norm in right_norm or right_norm in left_norm:
+        return 1.0
+    left_tokens = set(left_norm.split())
+    right_tokens = set(right_norm.split())
+    if not left_tokens or not right_tokens:
+        return 0.0
+    return len(left_tokens & right_tokens) / len(left_tokens | right_tokens)
+
+
+def _restore_source_project_dates(
+    projects: list[dict[str, Any]], resume_text: str
+) -> list[dict[str, Any]]:
+    """Use dates extracted from the original resume as the source of truth."""
+    source_records = _source_project_dates(resume_text)
+    if not source_records:
+        return projects
+
+    restored = []
+    for project in projects:
+        item = dict(project)
+        candidates = [
+            (_project_match_score(item.get("name", ""), source_name), source_name, dates)
+            for source_name, dates in source_records
+        ]
+        if candidates:
+            score, _source_name, source_dates = max(candidates, key=lambda candidate: candidate[0])
+            if score >= 0.45:
+                item["dates"] = source_dates
+        restored.append(item)
+    return restored
+
+
+def _normalize_coursework_detail(value: Any) -> str:
+    """Repair one known missing separator without inventing or changing coursework."""
+    text = _clean_text(value)
+    if re.match(r"(?i)^coursework\s*:", text):
+        text = re.sub(
+            r"(?i)\bComputer Vision\s+(?=Natural Language Processing\b)",
+            "Computer Vision, ",
+            text,
+        )
+    return text
+
+
 def _normalize_tailored_resume_payload(
     payload: dict[str, Any],
     resume_text: str,
+    job_role: str = "",
 ) -> Dict[str, Any]:
     # Convert Gemini's flexible JSON into ResumeAI's canonical schema.
     source = payload if isinstance(payload, dict) else {}
     identity = _extract_resume_identity(resume_text)
 
-    name = _clean_text(source.get("name")) or identity["name"]
-    contact_items = _string_list(source.get("contact_items"))
-    links = _string_list(source.get("links"))
+    # Prefer identity extracted from the original text, then append any additional
+    # model-parsed contacts. This avoids losing phone numbers or links when the LLM
+    # returns only part of the header.
+    name = _clean_text(identity.get("name")) or _clean_text(source.get("name"))
+    location = _clean_text(source.get("location"))
+    contact_items = _normalize_contact_values(
+        _string_list(identity.get("contact_items"))
+        + _string_list(source.get("contact_items")),
+        location,
+    )
+    links = _normalize_contact_values(
+        _string_list(identity.get("links"))
+        + _string_list(source.get("links")),
+        location,
+    )
+    contact_keys = {_contact_dedupe_key(item) for item in contact_items}
+    links = [item for item in links if _contact_dedupe_key(item) not in contact_keys]
 
-    if not contact_items:
-        contact_items = list(identity["contact_items"])
-    if not links:
-        links = list(identity["links"])
+    model_education = _normalize_education(source.get("education", []))
+    source_education = _extract_source_education(resume_text)
+    # The uploaded resume is authoritative for education. Use parsed source values
+    # whenever available, instead of allowing an AI placeholder to replace them.
+    education = source_education or model_education
+    education = [
+        {
+            **entry,
+            "details": list(dict.fromkeys(
+                _normalize_coursework_detail(detail)
+                for detail in _string_list(entry.get("details", []))
+                if _normalize_coursework_detail(detail)
+            )),
+        }
+        for entry in education
+    ]
 
-    contact_items = list(dict.fromkeys(contact_items))
-    links = list(dict.fromkeys(
-        item for item in links if item not in contact_items
-    ))
+    source_has_certifications, source_certification_lines = _extract_source_section(
+        resume_text, "certifications"
+    )
+    certifications = (
+        _split_source_section_items(source_certification_lines)
+        if source_has_certifications
+        else []
+    )
+
+    source_has_key_strengths, source_key_strength_lines = _extract_source_section(
+        resume_text, "key_strengths"
+    )
+    key_strengths = (
+        _split_source_section_items(source_key_strength_lines)
+        if source_has_key_strengths
+        else []
+    )
+
+    source_has_achievements, source_achievement_lines = _extract_source_section(
+        resume_text, "achievements"
+    )
+    # Do not let the model invent generic traits and present them as achievements.
+    # Keep only actual entries from a dedicated source section; if there is no
+    # source achievement section, project metrics stay inside their project bullets.
+    achievements = (
+        _split_source_section_items(source_achievement_lines)
+        if source_has_achievements
+        else []
+    )
 
     normalized = {
         "format_version": 1,
@@ -868,21 +1709,27 @@ def _normalize_tailored_resume_payload(
         "headline": _clean_text(source.get("headline")),
         "contact_items": contact_items,
         "links": links,
-        "location": _clean_text(source.get("location")),
+        "location": location,
         "summary": _clean_text(source.get("summary")),
         "skills": _normalize_skills(source.get("skills", [])),
         "experience": _normalize_experience(source.get("experience", [])),
-        "projects": _normalize_projects(source.get("projects", [])),
-        "education": _normalize_education(source.get("education", [])),
-        "certifications": _normalize_document_items(
-            source.get("certifications", [])
+        "projects": _restore_source_project_dates(
+            _normalize_projects(source.get("projects", [])), resume_text
         ),
-        "achievements": _normalize_document_items(
-            source.get("achievements", [])
-        ),
+        "education": education,
+        "certifications": certifications,
+        "key_strengths": key_strengths,
+        "achievements": achievements,
     }
 
-    return TailoredResumeResponse.model_validate(normalized).model_dump()
+    result = TailoredResumeResponse.model_validate(normalized).model_dump()
+    if _clean_text(job_role):
+        result["summary"] = _ensure_summary_targets_role(
+            result.get("summary", ""), job_role, resume_text
+        )
+        result["skills"] = _reorder_skills_for_role(result.get("skills", []), job_role)
+        result["projects"] = _reorder_projects_for_role(result.get("projects", []), job_role)
+    return result
 
 
 def tailor_resume(
@@ -894,25 +1741,43 @@ def tailor_resume(
         "You are ResumeAI's structured resume tailoring engine.\n\n"
         "Transform the candidate's existing resume into a clean, professional, "
         "ATS-friendly resume data model for a specific target role.\n\n"
-        "STRICT FACTUAL RULES:\n"
+        "STRICT FACTUALITY AND COMPLETENESS RULES:\n"
         "- Use ONLY facts explicitly present in the supplied resume.\n"
-        "- Never invent employers, titles, dates, technologies, metrics, awards, "
-        "certifications, responsibilities, links, or achievements.\n"
-        "- Do not convert a project into employment unless the resume explicitly "
-        "describes employment.\n"
-        "- Preserve the candidate's name, contact details, links, education, and "
-        "dates where present.\n"
-        "- Improve wording and ordering for the target role, but never add claims.\n"
-        "- Keep bullets concise and action-oriented.\n"
-        "- If formal work experience is absent, return an EMPTY experience array.\n"
-        "- Never create an 'Untitled' experience item or a note explaining that "
-        "no formal experience exists.\n"
+        "- Never invent employers, job titles, dates, technologies, metrics, awards, "
+        "certifications, responsibilities, links, achievements, or project outcomes.\n"
+        "- Preserve the candidate's name, all contact details, links, education, "
+        "dates, certifications, and numeric results exactly as supported by the source.\n"
+        "- Keep every source LinkedIn/GitHub/portfolio URL; never replace a real link with a placeholder.\n"
+        "- Merge and improve wording only; do not change the meaning or strength of a claim.\n"
+        "- Do not add tools just because they are common in the target role or job market.\n"
+        "- Keep every distinct project, qualification, certification, and real work experience "
+        "from the source. Do not silently drop records to make the resume shorter.\n"
+        "- Preserve meaningful technical details and results from each project; use concise "
+        "bullets, but do not replace concrete facts with vague generic summaries.\n"
+        "- Reorder skills and projects to emphasize the target role, while keeping all supported "
+        "source information. Do not claim the candidate is employed in the target role.\n"
+        "- The final summary must be tailored to the exact TARGET ROLE below. Never retain a career-goal "
+        "sentence seeking a different role (for example, Full Stack when the target is Machine Learning).\n"
+        "- End the summary with a truthful target-role statement that matches TARGET ROLE; keep all skills "
+        "and experience claims grounded in the source resume.\n"
+        "- If a headline is provided, it must be a truthful, concise candidate headline grounded "
+        "in source skills/education; never present the target role as a past or current job. "
+        "For a student, prefer a student/skills-based headline instead of implying paid experience.\n"
+        "- Do not convert a project into employment unless the resume explicitly describes it.\n"
+        "- If formal work experience is absent, return an EMPTY experience array. Projects must "
+        "remain in the projects array and must never be placed under experience.\n"
+        "- Never create an 'Untitled' item, blank section, placeholder, or note explaining that "
+        "no formal experience exists. Empty sections must be empty arrays/strings.\n"
+        "- Keep each existing metric only if it appears in the source; never estimate missing values.\n"
         "- Certifications and education details must be human-readable strings.\n"
+        "- Never merge key strengths into certifications. If the source has a 'Key Strengths' section, "
+        "preserve its entries only in key_strengths; otherwise return an empty key_strengths array.\n"
+        "- Do not create generic soft-skill claims or achievements that are not in the source.\n"
         "- Skills must be grouped as category + skills array.\n"
         "- Return JSON only. No markdown. No commentary.\n\n"
         "Return a JSON object with these keys: format_version, name, headline, "
         "contact_items, links, location, summary, skills, experience, projects, "
-        "education, certifications, achievements."
+        "education, certifications, key_strengths, achievements."
     )
 
     user = (
@@ -939,7 +1804,7 @@ def tailor_resume(
             model=OPENAI_MODEL,
         )
 
-    return _normalize_tailored_resume_payload(raw_payload, resume_text)
+    return _normalize_tailored_resume_payload(raw_payload, resume_text, job_role)
 
 
 # RESUMEAI_COVER_LETTER_V2
@@ -1124,3 +1989,15 @@ Return JSON with:
         schema=ApplicationPrepResponse,
         model=GEMINI_MODEL if AI_PROVIDER == "gemini" else OPENAI_MODEL,
     )
+
+
+# Public service functions imported by backend/main.py.
+__all__ = [
+    "analyze_resume",
+    "rewrite_resume",
+    "match_job",
+    "generate_cover_letter",
+    "interview_turn",
+    "generate_application_prep",
+    "tailor_resume",
+]
