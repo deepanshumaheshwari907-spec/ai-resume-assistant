@@ -25,6 +25,7 @@ import json
 import os
 
 import re
+import requests
 
 import random
 
@@ -68,6 +69,8 @@ app = FastAPI()
 GMAIL_USER = os.getenv("GMAIL_USER", "")
 
 GMAIL_PASS = os.getenv("GMAIL_PASS", "")
+BREVO_API_KEY = os.getenv("BREVO_API_KEY", "").strip()
+BREVO_SENDER_EMAIL = os.getenv("BREVO_SENDER_EMAIL", "").strip()
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 
@@ -201,56 +204,93 @@ def _build_auth_otp_email(purpose: str, otp_code: str):
 
 
 
-def send_otp_email(target_email: str, otp_code: str):
+def _send_auth_email_via_brevo(
+    target_email: str,
+    subject: str,
+    purpose: str,
+    otp_code: str,
+) -> None:
+    """Send an authentication OTP with Brevo HTTPS API or local Gmail SMTP fallback.
 
-    """Send a verification code only through configured SMTP.
-
-
-
-    No terminal/dev fallback exists. If SMTP is unavailable, the auth flow
-
-    fails closed instead of exposing the OTP.
-
+    Render Free blocks outbound SMTP ports. When BREVO_API_KEY is configured,
+    use Brevo's HTTPS API; SMTP remains available only for local development.
+    Never log recipient addresses, OTPs, API keys, or provider response bodies.
     """
+    plain_text, html_body = _build_auth_otp_email(purpose, otp_code)
 
+    if BREVO_API_KEY:
+        if not BREVO_SENDER_EMAIL:
+            raise RuntimeError(
+                "Email delivery is not configured. Set BREVO_SENDER_EMAIL in the backend environment."
+            )
+
+        payload = {
+            "sender": {"name": "ResumeAI", "email": BREVO_SENDER_EMAIL},
+            "to": [{"email": target_email}],
+            "subject": subject,
+            "htmlContent": html_body,
+            "textContent": plain_text,
+        }
+        headers = {
+            "accept": "application/json",
+            "api-key": BREVO_API_KEY,
+            "content-type": "application/json",
+        }
+        try:
+            response = requests.post(
+                "https://api.brevo.com/v3/smtp/email",
+                headers=headers,
+                json=payload,
+                timeout=15,
+            )
+        except requests.RequestException as exc:
+            print(f"Brevo email delivery failed: {type(exc).__name__}")
+            raise RuntimeError(
+                "We could not deliver the verification email. Please try again shortly."
+            ) from exc
+
+        if not 200 <= response.status_code < 300:
+            print(f"Brevo email delivery failed: HTTP {response.status_code}")
+            raise RuntimeError(
+                "We could not deliver the verification email. Please try again shortly."
+            )
+        return
+
+    # Local-development fallback. On Render, set BREVO_API_KEY so this SMTP
+    # path is not used on the Free instance.
     if not GMAIL_USER or not GMAIL_PASS:
-
         raise RuntimeError(
-
-            "Email delivery is not configured. Set GMAIL_USER and GMAIL_PASS in backend/.env."
-
+            "Email delivery is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL, "
+            "or configure GMAIL_USER and GMAIL_PASS for local SMTP development."
         )
 
-
-
     msg = MIMEMultipart("alternative")
-
-    msg["Subject"] = "Your ResumeAI verification code"
-
+    msg["Subject"] = subject
     msg["From"] = f"ResumeAI <{GMAIL_USER}>"
     msg["To"] = target_email
-
-    plain_text, html = _build_auth_otp_email("signup", otp_code)
     msg.attach(MIMEText(plain_text, "plain", "utf-8"))
-    msg.attach(MIMEText(html, "html", "utf-8"))
+    msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     try:
-
         with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as server:
-
             server.starttls()
-
             server.login(GMAIL_USER, GMAIL_PASS)
-
             server.sendmail(GMAIL_USER, target_email, msg.as_string())
-
     except Exception as exc:
-
         print(f"SMTP delivery failed: {type(exc).__name__}")
+        raise RuntimeError(
+            "We could not deliver the verification email. Please try again shortly."
+        ) from exc
 
-        raise RuntimeError("We could not deliver the verification email. Please try again shortly.") from exc
 
-
+def send_otp_email(target_email: str, otp_code: str):
+    """Send the signup verification OTP using the configured email provider."""
+    _send_auth_email_via_brevo(
+        target_email,
+        "Your ResumeAI verification code",
+        "signup",
+        otp_code,
+    )
 
 
 
@@ -765,40 +805,13 @@ def _validate_new_password(password: str) -> None:
 
 
 def send_password_reset_email(target_email: str, otp_code: str) -> None:
-
-    if not GMAIL_USER or not GMAIL_PASS:
-
-        raise RuntimeError("Email delivery is not configured. Set GMAIL_USER and GMAIL_PASS in backend/.env.")
-
-
-
-    msg = MIMEMultipart("alternative")
-
-    msg["Subject"] = "Your ResumeAI password reset code"
-
-    msg["From"] = f"ResumeAI <{GMAIL_USER}>"
-
-    msg["To"] = target_email
-
-    plain_text, html = _build_auth_otp_email("password_reset", otp_code)
-    msg.attach(MIMEText(plain_text, "plain", "utf-8"))
-    msg.attach(MIMEText(html, "html", "utf-8"))
-
-    try:
-
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as server:
-
-            server.starttls()
-
-            server.login(GMAIL_USER, GMAIL_PASS)
-
-            server.sendmail(GMAIL_USER, target_email, msg.as_string())
-
-    except Exception as exc:
-
-        raise RuntimeError("Password reset email could not be delivered.") from exc
-
-
+    """Send the password-reset OTP using the configured email provider."""
+    _send_auth_email_via_brevo(
+        target_email,
+        "Your ResumeAI password reset code",
+        "password_reset",
+        otp_code,
+    )
 
 
 
