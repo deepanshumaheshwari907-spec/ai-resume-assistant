@@ -250,7 +250,37 @@ def _send_auth_email_via_brevo(
             ) from exc
 
         if not 200 <= response.status_code < 300:
-            print(f"Brevo email delivery failed: HTTP {response.status_code}")
+            # Log minimal provider error metadata for diagnosis, not the full body.
+            # Never log the recipient, OTP, request payload, authorization header, or API key.
+            error_code = "unknown"
+            error_message = "No provider message returned"
+            try:
+                error_payload = response.json()
+                if isinstance(error_payload, dict):
+                    error_code = str(error_payload.get("code", "unknown"))[:100]
+                    error_message = str(error_payload.get("message", "No provider message returned"))[:300]
+                else:
+                    error_message = "Provider returned a non-object error response"
+            except (ValueError, requests.RequestException):
+                error_message = "Provider returned a non-JSON error response"
+
+            safe_details = f"code={error_code}; message={error_message}"
+            safe_details = re.sub(
+                r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b",
+                "[redacted-email]",
+                safe_details,
+            )
+            safe_details = re.sub(
+                r"(?i)\bxkeysib-[A-Za-z0-9_-]+\b",
+                "[redacted-api-key]",
+                safe_details,
+            )
+            safe_details = re.sub(
+                r"(?i)\b(api[-_ ]?key|password|token|otp|verification code)\s*[:=]\s*[^,;\s]+",
+                r"\1=[redacted]",
+                safe_details,
+            )
+            print(f"Brevo email delivery failed: HTTP {response.status_code}; {safe_details}")
             raise RuntimeError(
                 "We could not deliver the verification email. Please try again shortly."
             )
