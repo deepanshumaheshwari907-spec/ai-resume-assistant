@@ -1163,7 +1163,6 @@ export default function Dashboard() {
         </div>
       </div>
       <div className="upload-controls">
-        <input id="resume-file" type="file" accept=".pdf" onChange={handleFileChange} className="hidden-input" />
         <label htmlFor="resume-file" className="secondary-button">
           <UploadCloud size={16} /> {file ? "Change PDF" : "Choose PDF"}
         </label>
@@ -2592,6 +2591,13 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard-shell">
+      <input
+        id="resume-file"
+        type="file"
+        accept=".pdf"
+        onChange={handleFileChange}
+        className="hidden-input"
+      />
       <aside className={`dashboard-sidebar ${mobileNavOpen ? "open" : ""}`}>
         <div className="brand-block"><div className="brand-mark">R</div><div><strong>Resume<span>AI</span></strong><small>Career workspace</small></div></div>
         <nav className="side-nav">
