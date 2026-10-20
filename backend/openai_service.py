@@ -392,13 +392,19 @@ Return valid JSON only with these fields:
 - ats_issues: array of ATS readability/format issues
 - score_breakdown: object
 - matched_keywords: array
-STRICT FACTUAL GROUNDING FOR IMPROVED BULLETS:
-- Rewrite each bullet using ONLY facts from that same original bullet and its clearly relevant resume context.
-- Preserve the original deliverable/artifact, method, scope, ownership, and stated outcome.
-- Never replace one artifact with a different one (for example, heatmaps must not become dashboards).
+STRICT FACTUAL GROUNDING AND QUALITY BAR FOR IMPROVED BULLETS:
+- Each `improved` bullet must be a useful editorial rewrite, not merely the original with different punctuation or a final period.
+- When the source has room for improvement, materially improve its wording: use a direct action verb, remove filler/repetition, tighten the sentence, and make the existing action and deliverable easy to scan.
+- Preserve the original deliverable/artifact, method, scope, ownership, technologies, and stated outcome. Keep all factual details traceable to that same source bullet or clearly relevant resume context.
+- Prefer concise, resume-ready bullets (usually about 18-32 words when the source supports that length). Do not make a short source artificially longer.
+- Never replace one artifact with another (for example, heatmaps must not become dashboards).
 - Do not add capabilities such as interactivity, deployment, production use, automation, real-time behavior, scale, or measured improvements unless the resume explicitly supports that exact claim.
-- Do not add new numbers, percentages, dates, performance results, tools, or technologies that are not supported by the resume.
-- Prefer a conservative rewrite over a more impressive but inferred claim. If support is uncertain, keep the original wording unchanged.
+- Do not add new numbers, percentages, dates, performance results, tools, technologies, users, business impact, or ownership claims that are not supported by the resume.
+- Do not force a rewrite when the original is already clear and concise and changing it would make it less accurate. Otherwise, do more than a grammar-only edit.
+- Example of an allowed fact-preserving rewrite:
+  original: "Designed and built an end-to-end, LLM-integrated web application that analyzes resumes and returns structured feedback on ATS score, missing keywords, formatting, and skill gaps."
+  improved: "Built an end-to-end resume-analysis web app integrating an LLM to assess ATS scores and identify missing keywords, formatting issues, and skill gaps."
+  This example changes phrasing only; it does not add new achievements or metrics.
 - The `original` field must quote the full candidate source bullet as it appears in the resume, aside from ordinary whitespace/punctuation normalization.
 - The `improved` field may clarify wording, grammar, and structure, but may not expand the facts. A post-processing guard will discard unverified originals and reject unsupported claims.
 The response schema above is mandatory.

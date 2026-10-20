@@ -2623,3 +2623,760 @@
   }
 }
 
+/* ResumeAI Resume DNA Report v2 */
+
+.dna-report > section, .dna-report > nav, .dna-report > .result-grid { scroll-margin-top: 24px; }
+
+.dna-hero {
+
+  position: relative; isolation: isolate; overflow: hidden; padding: 28px;
+
+  border: 1px solid rgba(255,182,41,.2); border-radius: 22px;
+
+  background: radial-gradient(ellipse at 85% 6%,rgba(255,182,41,.15),transparent 34%),
+
+    radial-gradient(ellipse at 7% 100%,rgba(76,120,206,.08),transparent 40%),
+
+    linear-gradient(135deg,#171820 0%,#101116 58%,#0c0e14 100%);
+
+}
+
+.dna-hero::after {
+
+  content: ""; position: absolute; z-index: -1; width: 270px; height: 270px;
+
+  right: -155px; top: -155px; border: 1px solid rgba(255,182,41,.17);
+
+  border-radius: 50%; box-shadow: 0 0 0 26px rgba(255,182,41,.025),0 0 0 54px rgba(255,182,41,.018);
+
+  pointer-events: none;
+
+}
+
+.dna-hero-top { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 28px; }
+
+.dna-hero-copy { min-width: 0; }
+
+.dna-hero-kicker { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; color: var(--dash-orange); font-size: 10px; font-weight: 850; letter-spacing: .13em; }
+
+.dna-hero-kicker span { color: #696f7b; }
+
+.dna-hero-copy h2 { max-width: 650px; margin: 0; color: #fafbff; font-size: clamp(28px,3.2vw,42px); font-weight: 850; line-height: 1.08; letter-spacing: -.055em; }
+
+.dna-hero-copy > p { max-width: 560px; margin: 13px 0 0; color: #a0a6b4; font-size: 13px; line-height: 1.7; }
+
+.dna-hero-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 19px; }
+
+.dna-hero-pills span { display: inline-flex; align-items: center; gap: 7px; padding: 8px 10px; border: 1px solid rgba(255,255,255,.09); border-radius: 999px; background: rgba(5,6,10,.38); color: #c7cbd4; font-size: 10px; line-height: 1.3; }
+
+.dna-hero-pills span:first-child { color: #f6d28b; border-color: rgba(255,182,41,.17); }
+
+.dna-score-feature { display: flex; align-items: center; gap: 17px; min-width: 240px; }
+
+.dna-main-ring { --score: 0%; --ring-color: #ffb629; display: grid; place-items: center; width: 116px; height: 116px; flex: 0 0 116px; border-radius: 50%; background: conic-gradient(var(--ring-color) var(--score),rgba(255,255,255,.075) 0); box-shadow: 0 0 34px rgba(255,182,41,.08); }
+
+.dna-main-ring.success { --ring-color: #41d68a; }
+
+.dna-main-ring.warm { --ring-color: #ffb629; }
+
+.dna-main-ring.danger { --ring-color: #ff6868; }
+
+.dna-main-ring-inner { display: flex; align-items: center; justify-content: center; gap: 3px; width: 91px; height: 91px; border: 1px solid rgba(255,255,255,.09); border-radius: 50%; background: #101116; }
+
+.dna-main-ring-inner strong { color: #fff; font-size: 29px; font-weight: 850; line-height: 1; letter-spacing: -.05em; font-variant-numeric: tabular-nums; }
+
+.dna-main-ring-inner span { color: #777e8c; font-size: 10px; }
+
+.dna-score-caption { display: flex; flex-direction: column; gap: 5px; min-width: 90px; }
+
+.dna-score-caption > span { color: #8c93a1; font-size: 9px; font-weight: 850; letter-spacing: .12em; }
+
+.dna-score-caption strong { max-width: 170px; color: #f5f6fa; font-size: 14px; line-height: 1.35; }
+
+.dna-score-caption small { color: #737a88; font-size: 10px; }
+
+.dna-metric-strip { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); margin-top: 27px; padding-top: 19px; border-top: 1px solid rgba(255,255,255,.09); }
+
+.dna-metric { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 4px 10px; min-width: 0; padding: 0 18px; border-left: 1px solid rgba(255,255,255,.08); }
+
+.dna-metric:first-child { padding-left: 0; border-left: 0; }
+
+.dna-metric:last-child { padding-right: 0; }
+
+.dna-metric > span { color: #9ba1ae; font-size: 10px; font-weight: 650; line-height: 1.4; }
+
+.dna-metric strong { grid-row: span 2; color: #f7f8fb; font-size: 27px; font-weight: 850; line-height: 1; letter-spacing: -.05em; font-variant-numeric: tabular-nums; }
+
+.dna-metric small { color: #696f7c; font-size: 9px; line-height: 1.45; }
+
+.dna-report-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 4px 0; }
+
+.dna-report-nav button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 10px 13px; border: 1px solid rgba(255,255,255,.08); border-radius: 999px; background: rgba(255,255,255,.025); color: #aeb4c0; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; transition: background 160ms ease,border-color 160ms ease,color 160ms ease; }
+
+.dna-report-nav button:hover, .dna-report-nav button:focus-visible { outline: none; border-color: rgba(255,182,41,.3); background: rgba(255,182,41,.08); color: #ffd073; }
+
+.dna-breakdown-card, .dna-keyword-card, .dna-bullet-card { padding: 23px; border-radius: 19px; background: linear-gradient(145deg,rgba(19,21,28,.98),rgba(12,14,20,.98)); }
+
+.dna-section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+
+.dna-section-heading h3, .dna-radar-heading strong { display: block; margin: 0; color: #f4f6fb; font-size: 18px; font-weight: 800; letter-spacing: -.035em; }
+
+.dna-section-heading p { margin: 7px 0 0; color: #828997; font-size: 11px; line-height: 1.6; }
+
+.dna-section-mark { display: grid; place-items: center; width: 40px; height: 40px; flex: 0 0 40px; border: 1px solid rgba(255,182,41,.17); border-radius: 12px; background: rgba(255,182,41,.07); color: #ffca66; }
+
+.dna-breakdown-layout { display: grid; grid-template-columns: minmax(0,1fr); gap: 24px; align-items: center; }
+
+.dna-breakdown-layout.has-radar { grid-template-columns: minmax(0,1.15fr) minmax(230px,.85fr); }
+
+.dna-category-list { display: grid; gap: 17px; min-width: 0; }
+
+.dna-category-item { min-width: 0; }
+
+.dna-category-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+
+.dna-category-top span { color: #b9bfca; font-size: 11px; line-height: 1.5; }
+
+.dna-category-top strong { flex: 0 0 auto; color: #f4f6fa; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+.dna-category-track { height: 7px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.065); }
+
+.dna-category-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#f19a21,#ffcf68); box-shadow: 0 0 12px rgba(255,182,41,.12); transition: width 500ms ease; }
+
+.dna-radar-panel { display: flex; flex-direction: column; align-items: center; min-width: 0; padding: 17px 15px 13px; border: 1px solid rgba(255,255,255,.065); border-radius: 16px; background: radial-gradient(circle at center,rgba(255,182,41,.055),transparent 65%),rgba(4,6,10,.3); }
+
+.dna-radar-heading { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 10px; }
+
+.dna-radar-heading .eyebrow { margin-bottom: 5px; font-size: 8px; }
+
+.dna-radar-heading strong { font-size: 13px; }
+
+.dna-radar-dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: #ffb629; box-shadow: 0 0 0 5px rgba(255,182,41,.09); }
+
+.dna-radar-chart { display: block; width: min(100%,280px); max-height: 280px; overflow: visible; margin: 4px auto; }
+
+.dna-radar-grid { fill: none; stroke: rgba(255,255,255,.11); stroke-width: 1; }
+
+.dna-radar-axis { stroke: rgba(255,255,255,.09); stroke-width: 1; }
+
+.dna-radar-data { fill: rgba(255,182,41,.17); stroke: #ffbd43; stroke-width: 2; stroke-linejoin: round; }
+
+.dna-radar-point { fill: #ffdc93; stroke: #171820; stroke-width: 1.5; }
+
+.dna-radar-footnote { max-width: 260px; margin: 0; color: #727987; font-size: 9px; line-height: 1.55; text-align: center; }
+
+.dna-method-note { display: flex; align-items: flex-start; gap: 8px; margin-top: 20px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.065); color: #828997; font-size: 10px; line-height: 1.6; }
+
+.dna-method-note svg { flex: 0 0 auto; color: #72c99b; }
+
+.dna-feedback-grid { gap: 14px; }
+
+.dna-feedback-card { padding: 22px; border-radius: 18px; background: linear-gradient(145deg,rgba(20,22,29,.96),rgba(13,15,21,.98)); }
+
+.dna-feedback-card .section-header { align-items: flex-start; padding-bottom: 15px; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,.07); }
+
+.dna-feedback-card .section-header h3 { font-size: 18px; }
+
+.dna-feedback-card .bullet-row { gap: 10px; padding: 12px 0; color: #c2c7d0; font-size: 12px; line-height: 1.7; }
+
+.dna-feedback-card .bullet-row svg { margin-top: 3px; }
+
+.dna-feedback-card .bullet-row + .bullet-row { border-top: 1px solid rgba(255,255,255,.045); }
+
+.dna-keyword-card .chip-wrap { gap: 9px; }
+
+.dna-keyword-card .chip { padding: 8px 11px; font-size: 11px; font-weight: 650; }
+
+.dna-bullet-card .dna-section-heading { margin-bottom: 8px; }
+
+.dna-before-after { grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); gap: 12px; padding: 15px 0; border-top: 1px solid rgba(255,255,255,.065); }
+
+.dna-before-after:first-of-type { border-top: 0; }
+
+.dna-before-after > div { min-width: 0; padding: 15px; border: 1px solid rgba(255,255,255,.07); border-radius: 13px; background: rgba(255,255,255,.025); }
+
+.dna-before-after .dna-improved { border-color: rgba(65,214,138,.16); background: linear-gradient(145deg,rgba(65,214,138,.055),rgba(255,255,255,.015)); }
+
+.dna-before-after span { color: #848b99; font-size: 9px; font-weight: 850; letter-spacing: .12em; }
+
+.dna-before-after .dna-improved span { color: #6bd69b; }
+
+.dna-before-after p { margin-top: 8px; color: #b7bec9; font-size: 11px; line-height: 1.7; overflow-wrap: anywhere; }
+
+.dna-before-after .dna-improved p { color: #d2eddd; }
+
+.dna-before-after .before-after-arrow { align-self: center; color: #7b818e; }
+
+.dna-empty-state { margin: 8px 0; color: #818896; font-size: 12px; line-height: 1.6; }
+
+
+
+@media (max-width: 1100px) {
+
+  .dna-hero-top { grid-template-columns: minmax(0,1fr); }
+
+  .dna-score-feature { min-width: 0; }
+
+  .dna-main-ring { width: 98px; height: 98px; flex-basis: 98px; }
+
+  .dna-main-ring-inner { width: 77px; height: 77px; }
+
+}
+
+@media (max-width: 760px) {
+
+  .dna-hero { padding: 21px; border-radius: 18px; }
+
+  .dna-hero-copy h2 { font-size: clamp(26px,7vw,34px); }
+
+  .dna-metric-strip { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px 0; }
+
+  .dna-metric { padding: 0 12px; }
+
+  .dna-metric:nth-child(odd) { padding-left: 0; border-left: 0; }
+
+  .dna-metric:nth-child(even) { padding-right: 0; }
+
+  .dna-breakdown-layout.has-radar { grid-template-columns: minmax(0,1fr); }
+
+  .dna-radar-panel { width: 100%; box-sizing: border-box; }
+
+  .dna-report-nav { gap: 6px; }
+
+  .dna-report-nav button { padding: 9px 10px; font-size: 10px; }
+
+  .dna-breakdown-card, .dna-keyword-card, .dna-bullet-card, .dna-feedback-card { padding: 17px; }
+
+  .dna-before-after { grid-template-columns: minmax(0,1fr); gap: 7px; }
+
+  .dna-before-after .before-after-arrow { justify-self: center; transform: rotate(90deg); }
+
+}
+
+@media (max-width: 420px) {
+
+  .dna-hero { padding: 17px; }
+
+  .dna-hero-kicker { flex-wrap: wrap; font-size: 9px; }
+
+  .dna-score-feature { gap: 12px; }
+
+  .dna-main-ring { width: 82px; height: 82px; flex-basis: 82px; }
+
+  .dna-main-ring-inner { width: 65px; height: 65px; }
+
+  .dna-main-ring-inner strong { font-size: 23px; }
+
+  .dna-metric { gap: 4px 7px; padding-right: 8px; padding-left: 8px; }
+
+  .dna-metric strong { font-size: 23px; }
+
+  .dna-report-nav button { gap: 5px; padding: 8px; }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .dna-category-track span, .dna-report-nav button { transition: none; }
+
+}
+
+/* ResumeAI Analysis Story Reveal v1 */
+.dna-bullet-card .dna-section-heading h3 { letter-spacing: -0.035em; }
+.dna-bullet-card .dna-section-heading p { max-width: 660px; line-height: 1.6; }
+.rewrite-spotlight { position: relative; overflow: hidden; margin-top: 13px; padding: 15px; border: 1px solid rgba(255,255,255,.075); border-radius: 16px; background: linear-gradient(145deg,rgba(20,22,30,.92),rgba(12,13,19,.98)); transition: border-color .2s ease, transform .2s ease, background .2s ease; }
+.rewrite-spotlight:first-of-type { margin-top: 0; }
+.rewrite-spotlight:hover { border-color: rgba(255,183,54,.23); }
+.rewrite-spotlight.is-meaningful { border-left: 2px solid rgba(255,186,59,.65); }
+.rewrite-spotlight.is-strong { border-left: 2px solid rgba(71,211,143,.55); }
+.rewrite-spotlight-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:13px; }
+.rewrite-point-id { display:flex; align-items:center; gap:9px; color:#858c9b; font-size:9px; font-weight:800; letter-spacing:.11em; }
+.rewrite-point-id strong { margin-left:4px; color:#e7e9ef; font-variant-numeric:tabular-nums; }
+.rewrite-point-orb { display:grid; place-items:center; width:29px; height:29px; border:1px solid rgba(255,188,59,.2); border-radius:9px; color:#ffc45c; background:rgba(255,188,59,.07); }
+.rewrite-status { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:6px 9px; font-size:9px; font-weight:750; letter-spacing:.015em; white-space:nowrap; }
+.status-ready { color:#ffd98a; border:1px solid rgba(255,188,59,.21); background:rgba(255,188,59,.075); }
+.status-light { color:#b5c9ff; border:1px solid rgba(126,163,255,.17); background:rgba(126,163,255,.065); }
+.status-strong { color:#91e4b7; border:1px solid rgba(71,211,143,.17); background:rgba(71,211,143,.055); }
+.rewrite-source-block { padding:14px 15px; border:1px solid rgba(255,255,255,.07); border-radius:12px; background:rgba(255,255,255,.022); }
+.rewrite-label-row { display:flex; justify-content:space-between; gap:10px; align-items:center; margin-bottom:9px; color:#8d94a3; font-size:8px; font-weight:850; letter-spacing:.13em; }
+.rewrite-source-mark { color:#7d8491; font-size:8px; letter-spacing:.09em; }
+.rewrite-source-block p { margin:0; color:#d4d8e1; font-size:12px; line-height:1.75; overflow-wrap:anywhere; }
+.rewrite-reveal { margin-top:10px; border:1px solid rgba(255,188,59,.14); border-radius:12px; background:linear-gradient(110deg,rgba(255,188,59,.045),rgba(255,255,255,.012)); overflow:hidden; }
+.rewrite-reveal[open] { border-color:rgba(255,188,59,.25); background:linear-gradient(140deg,rgba(255,188,59,.055),rgba(20,22,30,.8)); }
+.rewrite-reveal summary { display:flex; align-items:center; gap:11px; padding:12px 13px; cursor:pointer; list-style:none; outline:none; }
+.rewrite-reveal summary::-webkit-details-marker { display:none; }
+.rewrite-reveal summary:focus-visible { outline:2px solid #ffc45c; outline-offset:-3px; border-radius:11px; }
+.rewrite-reveal-glyph { display:grid; place-items:center; flex:0 0 34px; width:34px; height:34px; border:1px solid rgba(255,188,59,.2); border-radius:10px; color:#ffd078; background:rgba(255,188,59,.09); }
+.rewrite-reveal-summary { display:flex; flex:1; min-width:0; flex-direction:column; gap:4px; }
+.rewrite-reveal-summary strong { color:#fff1cd; font-size:11px; font-weight:800; }
+.rewrite-reveal-summary small { color:#9299a7; font-size:10px; line-height:1.45; }
+.rewrite-reveal-action { display:inline-flex; flex:0 0 auto; align-items:center; gap:5px; color:#e5b957; font-size:8px; font-weight:900; letter-spacing:.1em; }
+.rewrite-reveal-action svg { transition:transform .2s ease; }
+.rewrite-reveal[open] .rewrite-reveal-action svg { transform:rotate(90deg); }
+.rewrite-reveal-content { padding:0 13px 14px; animation:rewriteRevealIn .28s ease both; }
+.rewrite-output-top { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin:1px 0 10px; }
+.rewrite-output-label { color:#f3c96b; font-size:8px; font-weight:900; letter-spacing:.13em; }
+.rewrite-review-badge { display:inline-flex; align-items:center; gap:5px; color:#99dfbb; font-size:8px; font-weight:800; letter-spacing:.04em; }
+.rewrite-output-text { margin:0; padding:17px; border:1px solid rgba(255,191,68,.19); border-radius:12px; color:#f2f3f7; background:radial-gradient(ellipse at 0 0,rgba(255,188,59,.07),transparent 58%),rgba(5,7,10,.32); font-size:13px; line-height:1.85; overflow-wrap:anywhere; }
+.rewrite-changed-word { display:inline; padding:1px 2px; border-radius:3px; color:#ffe29a; background:rgba(255,190,65,.15); box-shadow:inset 0 -1px 0 rgba(255,190,65,.45); text-decoration:none; animation:rewriteWordIn .32s ease both; }
+.rewrite-diff-key { display:flex; align-items:flex-start; gap:8px; margin-top:9px; color:#8e95a3; font-size:9px; line-height:1.55; }
+.rewrite-diff-swatch { flex:0 0 9px; width:9px; height:9px; margin-top:2px; border-radius:2px; background:#ffc45c; box-shadow:0 0 0 3px rgba(255,196,92,.1); }
+.rewrite-review-lenses { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:13px; }
+.rewrite-review-lenses > div { min-width:0; padding:11px; border:1px solid rgba(255,255,255,.06); border-radius:10px; background:rgba(255,255,255,.018); }
+.rewrite-review-lenses span { color:#bd9b50; font-size:8px; font-weight:900; letter-spacing:.09em; }
+.rewrite-review-lenses p { margin:6px 0 0; color:#a8aebb; font-size:10px; line-height:1.5; }
+.rewrite-reveal-footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-top:13px; }
+.rewrite-copy-button { display:inline-flex; justify-content:center; align-items:center; gap:7px; padding:9px 12px; border:1px solid rgba(255,188,59,.26); border-radius:9px; color:#17130a; background:linear-gradient(135deg,#ffd46f,#ffac27); font-size:10px; font-weight:850; cursor:pointer; transition:transform .16s ease,filter .16s ease; }
+.rewrite-copy-button:hover { transform:translateY(-1px); filter:brightness(1.04); }
+.rewrite-copy-muted { color:#b9eacd; border-color:rgba(71,211,143,.2); background:rgba(71,211,143,.07); }
+.rewrite-reveal-footer > span { display:inline-flex; align-items:center; gap:5px; color:#848c9a; font-size:9px; }
+.rewrite-reveal-footer > span svg { color:#75d8a2; }
+.rewrite-already-note { display:flex; align-items:center; gap:10px; margin-top:10px; padding:12px; border:1px solid rgba(71,211,143,.12); border-radius:11px; background:rgba(71,211,143,.035); }
+.rewrite-already-note > svg { flex:0 0 auto; color:#68d99c; }
+.rewrite-already-note > div { flex:1; min-width:0; }
+.rewrite-already-note strong { display:block; color:#b9f0d1; font-size:10px; }
+.rewrite-already-note p { margin:4px 0 0; color:#8f9a9b; font-size:9px; line-height:1.5; }
+@keyframes rewriteRevealIn { from {opacity:0;transform:translateY(7px)} to {opacity:1;transform:translateY(0)} }
+@keyframes rewriteWordIn { from {background:rgba(255,190,65,0);color:#f2f3f7} to {background:rgba(255,190,65,.15);color:#ffe29a} }
+@media (max-width:820px) { .rewrite-review-lenses { grid-template-columns:1fr; } }
+@media (max-width:560px) { .rewrite-spotlight { padding:11px; } .rewrite-spotlight-head { align-items:flex-start; } .rewrite-status { max-width:122px; white-space:normal; text-align:center; } .rewrite-reveal-action { font-size:0; } .rewrite-reveal-action svg { width:17px; height:17px; } .rewrite-reveal-footer { align-items:flex-start; flex-direction:column; } .rewrite-already-note { align-items:flex-start; flex-wrap:wrap; } .rewrite-copy-muted { margin-left:25px; } }
+@media (prefers-reduced-motion: reduce) { .rewrite-reveal-content, .rewrite-changed-word { animation:none; } .rewrite-reveal-action svg, .rewrite-copy-button { transition:none; } }
+/* ResumeAI Story Reveal Accurate Diff v2 */
+.rewrite-omission-check { margin-top: 10px; padding: 11px 12px; border: 1px solid rgba(255, 113, 125, .19); border-radius: 11px; background: rgba(255, 92, 108, .045); }
+.rewrite-omission-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.rewrite-omission-head strong { color: #ffc2c8; font-size: 10px; font-weight: 850; }
+.rewrite-omission-head span { color: #d99099; font-size: 8px; font-weight: 850; letter-spacing: .08em; }
+.rewrite-omission-check > p { margin: 8px 0 0; color: #d4d8e1; font-size: 11px; line-height: 1.7; overflow-wrap: anywhere; }
+.rewrite-omission-check > small { display: block; margin-top: 7px; color: #a49ba3; font-size: 9px; line-height: 1.55; }
+.rewrite-omitted-word { display: inline; padding: 1px 2px; border-radius: 3px; color: #ffc2c8; background: rgba(255, 91, 108, .13); box-shadow: inset 0 -1px 0 rgba(255, 91, 108, .5); text-decoration: none; }
+/* ResumeAI Story Reveal Classification Guard v2 */
+.rewrite-spotlight.is-review { border-left: 2px solid rgba(255, 113, 125, .78); }
+.rewrite-spotlight.is-review:hover { border-color: rgba(255, 113, 125, .42); }
+.rewrite-status.status-review { color: #ffc2c8; border: 1px solid rgba(255, 113, 125, .27); background: rgba(255, 91, 108, .09); }
+/* ResumeAI Analysis Insight Visualization v1 */
+.dna-insight-viz-grid { align-items: stretch; gap: 14px; }
+.dna-insight-viz-grid .dna-feedback-card { position: relative; overflow: hidden; min-width: 0; padding: 21px; border-radius: 19px; background: radial-gradient(ellipse at 100% 0%, rgba(61, 216, 153, .065), transparent 34%), linear-gradient(145deg, rgba(20, 22, 30, .97), rgba(11, 13, 19, .985)); }
+.dna-insight-viz-grid .dna-opportunities-card { background: radial-gradient(ellipse at 100% 0%, rgba(255, 183, 61, .075), transparent 35%), linear-gradient(145deg, rgba(20, 22, 30, .97), rgba(11, 13, 19, .985)); }
+.dna-insight-heading, .dna-keyword-explorer-head { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding-bottom: 14px; margin-bottom: 13px; border-bottom: 1px solid rgba(255, 255, 255, .065); }
+.dna-insight-heading-copy, .dna-keyword-heading-copy { min-width: 0; }
+.dna-insight-heading-copy .eyebrow, .dna-keyword-heading-copy .eyebrow { color: #9299a7; font-size: 8px; font-weight: 850; letter-spacing: .115em; line-height: 1.6; }
+.dna-insight-heading-copy h3, .dna-keyword-heading-copy h3 { margin: 4px 0 0; color: #f3f5fa; font-size: 17px; letter-spacing: -.035em; line-height: 1.2; }
+.dna-insight-heading-copy p, .dna-keyword-heading-copy p { margin: 7px 0 0; color: #939aa9; font-size: 10px; line-height: 1.55; }
+
+/* Strength signals: animated visual accents are decorative, not invented scores. */
+.dna-strength-emblem { position: relative; display: grid; place-items: center; flex: 0 0 56px; width: 56px; height: 56px; }
+.dna-strength-emblem-ring { position: absolute; inset: 5px; border: 1px solid rgba(65, 220, 153, .23); border-radius: 50%; }
+.dna-strength-emblem-ring-a { animation: dnaInsightOrbit 9s linear infinite; border-top-color: #57dda7; border-right-color: transparent; }
+.dna-strength-emblem-ring-b { inset: 0; border-style: dashed; border-color: rgba(65, 220, 153, .17); animation: dnaInsightOrbit 16s linear infinite reverse; }
+.dna-strength-emblem-core { display: grid; place-items: center; width: 33px; height: 33px; color: #7cf0ba; border: 1px solid rgba(65, 220, 153, .3); border-radius: 11px; background: rgba(65, 220, 153, .09); box-shadow: 0 0 22px rgba(65, 220, 153, .09); }
+.dna-strength-emblem-spark { position: absolute; top: -1px; right: -1px; color: #b3f9d5; font-size: 15px; line-height: 1; animation: dnaInsightPulse 2.8s ease-in-out infinite; }
+.dna-strength-map { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.dna-strength-node { position: relative; display: grid; grid-template-columns: 28px minmax(0, 1fr) 14px; align-items: start; gap: 9px; min-width: 0; min-height: 104px; padding: 12px 11px; border: 1px solid rgba(255, 255, 255, .065); border-radius: 13px; background: linear-gradient(135deg, rgba(255, 255, 255, .027), rgba(255, 255, 255, .008)); animation: dnaInsightEnter .45s ease both; transition: transform .2s ease, border-color .2s ease, background .2s ease; }
+.dna-strength-node:hover { transform: translateY(-2px); border-color: rgba(80, 224, 163, .26); background: rgba(55, 192, 135, .04); }
+.dna-strength-index { display: grid; place-items: center; width: 27px; height: 27px; color: #92eac1; border: 1px solid rgba(65, 220, 153, .2); border-radius: 9px; background: rgba(65, 220, 153, .075); font-size: 9px; font-weight: 850; font-variant-numeric: tabular-nums; }
+.dna-strength-node-copy { min-width: 0; }
+.dna-strength-node-label { display: block; margin: 1px 0 5px; color: #7aa994; font-size: 7px; font-weight: 850; letter-spacing: .11em; }
+.dna-strength-node-copy p { margin: 0; color: #c6ccd6; font-size: 10px; line-height: 1.65; overflow-wrap: anywhere; }
+.dna-strength-check { margin-top: 5px; color: #52d99d; }
+.dna-signal-pips { display: flex; align-items: center; gap: 3px; margin-top: 9px; }
+.dna-signal-pips i { display: block; width: 15px; height: 3px; border-radius: 4px; background: rgba(78, 220, 157, .24); }
+.dna-signal-pips i:nth-child(1) { background: #4edc9d; }
+.dna-signal-pips i:nth-child(2) { background: rgba(78, 220, 157, .62); }
+.dna-signal-pips i:nth-child(3) { background: rgba(78, 220, 157, .25); }
+.dna-insight-footnote { display: flex; align-items: center; gap: 7px; margin-top: 13px; padding-top: 11px; border-top: 1px solid rgba(255, 255, 255, .055); color: #858e9d; font-size: 8px; line-height: 1.5; }
+.dna-insight-footnote svg { flex: 0 0 auto; color: #55daa0; }
+
+/* Improvement ideas: a focus path, explicitly not a fabricated severity score. */
+.dna-focus-emblem { position: relative; display: flex; align-items: flex-end; justify-content: center; gap: 4px; flex: 0 0 56px; width: 56px; height: 50px; padding: 7px; border: 1px solid rgba(255, 185, 66, .15); border-radius: 15px; background: rgba(255, 181, 48, .045); }
+.dna-focus-emblem span { display: block; width: 5px; border-radius: 5px; background: linear-gradient(180deg, #ffd16f, #a76c24); animation: dnaFocusRise 1.8s ease-in-out infinite alternate; }
+.dna-focus-emblem span:nth-child(1) { height: 13px; animation-delay: 0ms; }
+.dna-focus-emblem span:nth-child(2) { height: 23px; animation-delay: 180ms; }
+.dna-focus-emblem span:nth-child(3) { height: 17px; animation-delay: 360ms; }
+.dna-focus-emblem svg { position: absolute; top: 7px; right: 7px; color: #ffc45d; }
+.dna-focus-path { position: relative; display: grid; gap: 8px; }
+.dna-focus-path::before { content: ""; position: absolute; left: 14px; top: 27px; bottom: 27px; width: 1px; background: linear-gradient(180deg, rgba(255, 190, 74, .48), rgba(255, 190, 74, .07)); }
+.dna-focus-step { position: relative; display: grid; grid-template-columns: 29px minmax(0, 1fr) 19px; align-items: start; gap: 9px; padding: 10px 9px; border: 1px solid rgba(255, 255, 255, .055); border-radius: 12px; background: rgba(255, 255, 255, .017); animation: dnaInsightEnter .45s ease both; transition: background .18s ease, border-color .18s ease, transform .18s ease; }
+.dna-focus-step:hover { transform: translateX(2px); border-color: rgba(255, 190, 74, .2); background: rgba(255, 190, 74, .03); }
+.dna-focus-index { z-index: 1; display: grid; place-items: center; width: 28px; height: 28px; color: #ffd27b; border: 1px solid rgba(255, 185, 66, .26); border-radius: 9px; background: #17151a; box-shadow: 0 0 0 3px rgba(255, 185, 66, .025); font-size: 9px; font-weight: 850; font-variant-numeric: tabular-nums; }
+.dna-focus-copy { min-width: 0; }
+.dna-focus-label { display: block; margin: 1px 0 5px; color: #b9975a; font-size: 7px; font-weight: 850; letter-spacing: .11em; }
+.dna-focus-copy p { margin: 0; color: #c6ccd6; font-size: 10px; line-height: 1.65; overflow-wrap: anywhere; }
+.dna-focus-marker { display: grid; place-items: center; width: 19px; height: 19px; margin-top: 3px; color: #c7a15d; border: 1px solid rgba(255, 185, 66, .15); border-radius: 6px; background: rgba(255, 185, 66, .045); }
+.dna-focus-marker svg { transition: transform .2s ease; }
+.dna-focus-step:hover .dna-focus-marker svg { transform: translateX(2px); }
+.dna-focus-footnote svg { color: #ffc45d; }
+
+/* Keywords: native <details> keep the explorer accessible and interactive without new state/dependencies. */
+.dna-keyword-explorer { position: relative; overflow: hidden; }
+.dna-keyword-explorer::before { content: ""; position: absolute; right: -95px; top: -125px; width: 240px; height: 240px; border: 1px solid rgba(255, 112, 126, .095); border-radius: 50%; box-shadow: 0 0 0 24px rgba(255, 112, 126, .018), 0 0 0 50px rgba(255, 112, 126, .012); pointer-events: none; }
+.dna-keyword-explorer-head { position: relative; z-index: 1; }
+.dna-keyword-orbit { position: relative; display: grid; place-items: center; flex: 0 0 58px; width: 58px; height: 58px; }
+.dna-keyword-orbit-ring { position: absolute; border: 1px solid rgba(255, 105, 122, .27); border-radius: 50%; }
+.dna-keyword-orbit-ring-one { inset: 4px; border-style: dashed; animation: dnaInsightOrbit 18s linear infinite; }
+.dna-keyword-orbit-ring-two { inset: 11px; border-color: rgba(255, 105, 122, .18); animation: dnaInsightOrbit 11s linear infinite reverse; }
+.dna-keyword-orbit-core { display: grid; place-items: center; width: 31px; height: 31px; color: #ff8994; border: 1px solid rgba(255, 105, 122, .27); border-radius: 10px; background: rgba(255, 105, 122, .085); box-shadow: 0 0 20px rgba(255, 105, 122, .08); }
+.dna-keyword-orbit-dot { position: absolute; top: 1px; right: 8px; width: 6px; height: 6px; border-radius: 50%; background: #ff8b95; box-shadow: 0 0 0 4px rgba(255, 105, 122, .1); }
+.dna-keyword-grid { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.dna-keyword-node { min-width: 0; overflow: hidden; border: 1px solid rgba(255, 106, 121, .14); border-radius: 12px; background: linear-gradient(145deg, rgba(255, 93, 111, .045), rgba(255, 255, 255, .012)); animation: dnaInsightEnter .42s ease both; transition: border-color .18s ease, background .18s ease, transform .18s ease; }
+.dna-keyword-node:hover, .dna-keyword-node[open] { border-color: rgba(255, 116, 129, .32); background: linear-gradient(145deg, rgba(255, 93, 111, .075), rgba(255, 255, 255, .014)); }
+.dna-keyword-node[open] { grid-column: span 1; }
+.dna-keyword-node summary { display: grid; grid-template-columns: 23px minmax(0, 1fr) 12px; align-items: center; gap: 8px; min-height: 49px; padding: 9px 10px; list-style: none; cursor: pointer; }
+.dna-keyword-node summary::-webkit-details-marker { display: none; }
+.dna-keyword-index { display: grid; place-items: center; width: 23px; height: 23px; color: #f29aa2; border: 1px solid rgba(255, 106, 121, .2); border-radius: 7px; background: rgba(255, 106, 121, .075); font-size: 8px; font-weight: 850; font-variant-numeric: tabular-nums; }
+.dna-keyword-term { min-width: 0; color: #f0a0a8; font-size: 10px; font-weight: 750; line-height: 1.4; overflow-wrap: anywhere; }
+.dna-keyword-state { grid-column: 2; grid-row: 2; margin-top: -4px; color: #8b727b; font-size: 6px; font-weight: 850; letter-spacing: .09em; }
+.dna-keyword-chevron { grid-column: 3; grid-row: 1 / span 2; color: #bd828b; transition: transform .2s ease; }
+.dna-keyword-node[open] .dna-keyword-chevron { transform: rotate(90deg); }
+.dna-keyword-detail { padding: 0 11px 12px 41px; animation: dnaInsightEnter .22s ease both; }
+.dna-keyword-detail > span { color: #ffc36a; font-size: 7px; font-weight: 850; letter-spacing: .11em; }
+.dna-keyword-detail p { margin: 6px 0 0; color: #c3bac1; font-size: 9px; line-height: 1.6; }
+.dna-keyword-footnote { position: relative; z-index: 1; }
+.dna-keyword-footnote svg { color: #ff9ba5; }
+
+@keyframes dnaInsightOrbit { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes dnaInsightPulse { 0%, 100% { opacity: .45; transform: scale(.9); } 50% { opacity: 1; transform: scale(1.12); } }
+@keyframes dnaFocusRise { from { opacity: .55; transform: scaleY(.8); } to { opacity: 1; transform: scaleY(1); } }
+@keyframes dnaInsightEnter { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+
+@media (max-width: 900px) {
+  .dna-keyword-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  .dna-insight-viz-grid { grid-template-columns: 1fr; }
+  .dna-insight-viz-grid .dna-feedback-card { padding: 16px; }
+  .dna-strength-map { grid-template-columns: 1fr; }
+  .dna-keyword-grid { grid-template-columns: 1fr; }
+  .dna-insight-heading, .dna-keyword-explorer-head { gap: 10px; }
+  .dna-strength-emblem, .dna-focus-emblem, .dna-keyword-orbit { flex-basis: 46px; width: 46px; height: 46px; }
+  .dna-strength-emblem-core { width: 29px; height: 29px; }
+  .dna-keyword-node summary { min-height: 45px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dna-strength-emblem-ring-a, .dna-strength-emblem-ring-b, .dna-strength-emblem-spark,
+  .dna-focus-emblem span, .dna-keyword-orbit-ring-one, .dna-keyword-orbit-ring-two,
+  .dna-strength-node, .dna-focus-step, .dna-keyword-node, .dna-keyword-detail { animation: none !important; }
+  .dna-strength-node, .dna-focus-step, .dna-keyword-node { transition: none; }
+}
+/* ResumeAI Analysis Density Polish v1 */
+/* Keep the premium visual language, reduce nested-card weight and visual noise. */
+.dna-insight-viz-grid { gap: 12px; }
+.dna-insight-viz-grid .dna-feedback-card {
+  padding: 16px 18px;
+  border-radius: 16px;
+  box-shadow: none;
+  background: linear-gradient(145deg, rgba(19, 21, 28, .96), rgba(12, 13, 19, .98));
+}
+.dna-insight-viz-grid .dna-opportunities-card {
+  background: linear-gradient(145deg, rgba(20, 21, 27, .97), rgba(12, 13, 19, .985));
+}
+.dna-insight-heading, .dna-keyword-explorer-head {
+  gap: 12px;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+}
+.dna-insight-heading-copy h3, .dna-keyword-heading-copy h3 { font-size: 16px; }
+.dna-insight-heading-copy p, .dna-keyword-heading-copy p { margin-top: 5px; line-height: 1.5; }
+.dna-strength-emblem, .dna-focus-emblem, .dna-keyword-orbit {
+  flex-basis: 46px;
+  width: 46px;
+  height: 44px;
+}
+.dna-strength-emblem-ring-a { animation-duration: 15s; opacity: .8; }
+.dna-strength-emblem-ring-b { animation-duration: 22s; opacity: .65; }
+.dna-strength-emblem-spark { animation-duration: 4.5s; }
+.dna-strength-map { gap: 7px; }
+.dna-strength-node {
+  min-height: 0;
+  padding: 10px;
+  gap: 8px;
+  border-radius: 11px;
+  border-color: rgba(255, 255, 255, .045);
+  background: rgba(255, 255, 255, .012);
+  animation-duration: .32s;
+}
+.dna-strength-node:hover { transform: translateY(-1px); }
+.dna-strength-index { width: 24px; height: 24px; border-radius: 8px; }
+.dna-strength-node-copy p { font-size: 10px; line-height: 1.55; }
+.dna-signal-pips { margin-top: 6px; }
+.dna-signal-pips i { width: 11px; height: 2px; }
+.dna-focus-emblem { border-radius: 12px; padding: 6px; }
+.dna-focus-emblem span { animation-duration: 2.7s; opacity: .85; }
+.dna-focus-path { gap: 5px; }
+.dna-focus-path::before { opacity: .6; }
+.dna-focus-step {
+  padding: 8px 9px;
+  gap: 8px;
+  border-radius: 10px;
+  border-color: rgba(255, 255, 255, .04);
+  background: rgba(255, 255, 255, .009);
+  animation-duration: .32s;
+}
+.dna-focus-step:hover { transform: none; background: rgba(255, 190, 74, .025); }
+.dna-focus-index { width: 25px; height: 25px; border-radius: 8px; }
+.dna-focus-label { margin-bottom: 3px; }
+.dna-focus-copy p { font-size: 10px; line-height: 1.55; }
+.dna-focus-marker { width: 17px; height: 17px; }
+.dna-insight-footnote { margin-top: 10px; padding-top: 9px; }
+
+/* Compact keyword signals: clear clickable terms with detail on demand. */
+.dna-keyword-explorer { padding: 16px 18px; }
+.dna-keyword-explorer::before { opacity: .45; }
+.dna-keyword-orbit-ring-one { animation-duration: 28s; opacity: .7; }
+.dna-keyword-orbit-ring-two { animation-duration: 22s; opacity: .65; }
+.dna-keyword-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 7px; }
+.dna-keyword-node {
+  border-radius: 10px;
+  border-color: rgba(255, 106, 121, .10);
+  background: rgba(255, 93, 111, .022);
+  animation-duration: .3s;
+}
+.dna-keyword-node:hover, .dna-keyword-node[open] {
+  border-color: rgba(255, 116, 129, .25);
+  background: rgba(255, 93, 111, .045);
+}
+.dna-keyword-node summary {
+  grid-template-columns: 21px minmax(0, 1fr) 11px;
+  min-height: 41px;
+  gap: 7px;
+  padding: 7px 9px;
+}
+.dna-keyword-index { width: 21px; height: 21px; border-radius: 6px; }
+.dna-keyword-term { font-size: 10px; }
+.dna-keyword-state { display: none; }
+.dna-keyword-detail { padding: 0 10px 10px 37px; }
+.dna-keyword-detail p { margin-top: 4px; }
+.dna-keyword-footnote { margin-top: 9px; }
+
+/* Keep the Story Reveal interactive but shorten the default scan path. */
+.dna-bullet-card > .rewrite-spotlight { margin-top: 9px; padding: 12px; border-radius: 13px; }
+.dna-bullet-card .rewrite-spotlight-head { margin-bottom: 9px; }
+.dna-bullet-card .rewrite-source-block { padding: 10px 12px; }
+.dna-bullet-card .rewrite-source-block p { font-size: 11px; line-height: 1.6; }
+.dna-bullet-card .rewrite-reveal summary { padding: 9px 10px; }
+.dna-bullet-card .rewrite-reveal-glyph { flex-basis: 30px; width: 30px; height: 30px; }
+.dna-bullet-card .rewrite-reveal-content { padding: 0 10px 11px; }
+.dna-bullet-card .rewrite-output-text { padding: 13px; font-size: 12px; line-height: 1.7; }
+.dna-bullet-card .rewrite-review-lenses { gap: 6px; margin-top: 10px; }
+.dna-bullet-card .rewrite-review-lenses > div { padding: 9px; }
+.dna-bullet-card .rewrite-reveal-footer { margin-top: 10px; }
+@media (max-width: 700px) {
+  .dna-insight-viz-grid .dna-feedback-card, .dna-keyword-explorer { padding: 14px; }
+  .dna-strength-map { grid-template-columns: 1fr; }
+  .dna-keyword-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 460px) {
+  .dna-keyword-grid { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dna-strength-emblem-ring-a, .dna-strength-emblem-ring-b, .dna-strength-emblem-spark,
+  .dna-focus-emblem span, .dna-keyword-orbit-ring-one, .dna-keyword-orbit-ring-two { animation: none !important; }
+}
+/* ResumeAI Job Match Experience v1 */
+.jm-workspace { gap: 14px; }
+.jm-page-heading { align-items: flex-end; gap: 18px; }
+.jm-page-heading h2 { letter-spacing: -.045em; }
+.jm-flow-rail { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; padding: 5px; border: 1px solid rgba(255,255,255,.075); border-radius: 999px; background: rgba(255,255,255,.018); }
+.jm-flow-rail span { display: inline-flex; align-items: center; gap: 6px; padding: 7px 9px; color: #656b78; border-radius: 999px; font-size: 9px; white-space: nowrap; }
+.jm-flow-rail b { color: #9ba1ad; font-size: 9px; letter-spacing: .04em; }
+.jm-flow-rail span.is-current { color: #ffcf74; background: rgba(255,182,41,.09); }
+.jm-flow-rail span.is-current b { color: #ffc45d; }
+
+.jm-input-card { position: relative; overflow: hidden; padding: 20px; background: radial-gradient(ellipse at 100% 0%, rgba(255,182,41,.07), transparent 38%), rgba(17,18,24,.88); }
+.jm-input-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 15px; }
+.jm-input-title-wrap { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
+.jm-input-icon { display: grid; place-items: center; width: 40px; height: 40px; flex: 0 0 auto; border-radius: 12px; color: #ffca69; background: rgba(255,182,41,.09); border: 1px solid rgba(255,182,41,.16); }
+.jm-input-title-wrap .eyebrow { margin-bottom: 5px; }
+.jm-input-title-wrap h3 { margin: 0; font-size: 17px; letter-spacing: -.025em; }
+.jm-input-title-wrap p { margin: 6px 0 0; color: #8d93a0; max-width: 640px; font-size: 11px; line-height: 1.6; }
+.jm-input-limit { flex: 0 0 auto; padding: 6px 9px; border: 1px solid rgba(255,255,255,.075); background: rgba(255,255,255,.025); color: #727987; border-radius: 999px; font-size: 9px; }
+.jm-job-textarea { min-height: 190px; padding: 15px; border-color: rgba(255,255,255,.09); background: rgba(7,8,12,.75); line-height: 1.65; resize: vertical; }
+.jm-job-textarea:focus { border-color: rgba(255,182,41,.42); box-shadow: 0 0 0 3px rgba(255,182,41,.06); }
+.jm-input-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+.jm-char-count { color: #e9edf4; font-size: 10px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.jm-char-count span { color: #626977; font-weight: 500; }
+.jm-char-count.is-over-limit { color: #ff8b8b; }
+.jm-input-privacy { display: inline-flex; align-items: center; gap: 6px; flex: 1; color: #707785; font-size: 9px; line-height: 1.4; }
+.jm-input-privacy svg { color: #7eac96; flex: 0 0 auto; }
+.jm-match-button { flex: 0 0 auto; }
+
+.jm-preview-board { overflow: hidden; border: 1px solid rgba(255,255,255,.075); border-radius: 18px; padding: 19px; background: linear-gradient(135deg, rgba(18,20,27,.92), rgba(11,12,17,.94)); animation: jmLiftIn .45s ease both; }
+.jm-preview-heading, .jm-section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.jm-preview-heading { margin-bottom: 16px; }
+.jm-preview-heading .eyebrow, .jm-section-heading .eyebrow { margin-bottom: 5px; }
+.jm-preview-heading h3, .jm-section-heading h3 { margin: 0; font-size: 17px; letter-spacing: -.03em; }
+.jm-preview-lockup { display: inline-flex; align-items: center; gap: 6px; color: #d7b36f; font-size: 9px; white-space: nowrap; }
+.jm-preview-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+.jm-preview-item { min-width: 0; position: relative; overflow: hidden; padding: 17px; border: 1px solid rgba(255,255,255,.065); border-radius: 14px; background: rgba(255,255,255,.018); transition: transform .2s ease, border-color .2s ease; }
+.jm-preview-item:hover { transform: translateY(-2px); border-color: rgba(255,182,41,.18); }
+.jm-preview-number { position: absolute; top: 12px; right: 13px; color: rgba(255,255,255,.18); font-size: 20px; font-weight: 900; letter-spacing: -.06em; }
+.jm-preview-glyph { display: grid; place-items: center; width: 32px; height: 32px; color: #f1bb5d; border: 1px solid rgba(255,182,41,.12); border-radius: 10px; background: rgba(255,182,41,.06); }
+.jm-preview-item h4 { margin: 14px 0 5px; font-size: 12px; color: #e6e9ef; }
+.jm-preview-item p { margin: 0; color: #818795; font-size: 10px; line-height: 1.6; }
+
+.jm-result-stack { display: grid; gap: 13px; }
+.jm-hero-card { position: relative; isolation: isolate; overflow: hidden; padding: 23px; border-color: rgba(255,182,41,.17); background: radial-gradient(ellipse at 92% 5%, rgba(255,182,41,.14), transparent 34%), radial-gradient(ellipse at 0% 100%, rgba(65,214,138,.045), transparent 40%), linear-gradient(135deg, #171820, #101116 62%, #0c0d12); animation: jmLiftIn .45s ease both; }
+.jm-hero-orbit { position: absolute; z-index: -1; width: 240px; height: 240px; border-radius: 50%; border: 1px solid rgba(255,182,41,.09); pointer-events: none; }
+.jm-hero-orbit-one { right: -128px; top: -150px; box-shadow: 0 0 0 22px rgba(255,182,41,.018), 0 0 0 46px rgba(255,182,41,.012); }
+.jm-hero-orbit-two { width: 150px; height: 150px; right: -83px; top: -105px; border-color: rgba(255,182,41,.12); }
+.jm-report-kicker { position: relative; z-index: 1; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 23px; }
+.jm-report-kicker > span:first-child { display: inline-flex; align-items: center; gap: 7px; color: #ffc35c; font-size: 9px; font-weight: 900; letter-spacing: .13em; }
+.jm-report-transparency { display: inline-flex; align-items: center; gap: 5px; color: #7c8491; font-size: 9px; }
+.jm-report-transparency svg { color: #78b194; }
+.jm-hero-main { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 25px; align-items: center; }
+.jm-hero-copy { max-width: 710px; min-width: 0; }
+.jm-hero-copy .eyebrow { color: #8d94a2; margin-bottom: 8px; }
+.jm-hero-copy h3 { margin: 0; max-width: 640px; font-size: clamp(23px,2.4vw,31px); line-height: 1.12; letter-spacing: -.05em; }
+.jm-hero-copy p { margin: 10px 0 0; max-width: 680px; color: #9da4b2; font-size: 11px; line-height: 1.65; }
+.jm-hero-badges { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 14px; }
+.jm-fit-badge, .jm-evidence-badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 7px 10px; font-size: 9px; font-weight: 800; }
+.jm-fit-badge { border: 1px solid rgba(255,182,41,.19); color: #ffcf77; background: rgba(255,182,41,.065); }
+.jm-fit-success { border-color: rgba(65,214,138,.2); color: #81e5b0; background: rgba(65,214,138,.06); }
+.jm-fit-danger { border-color: rgba(255,104,104,.2); color: #ff9a9a; background: rgba(255,104,104,.06); }
+.jm-evidence-badge { color: #8fbaa4; border: 1px solid rgba(65,214,138,.09); background: rgba(65,214,138,.035); }
+.jm-score-display { display: flex; align-items: center; gap: 13px; }
+.jm-score-ring { width: 104px; height: 104px; box-shadow: 0 0 0 7px rgba(255,255,255,.018), 0 10px 30px rgba(0,0,0,.22); }
+.jm-score-ring-inner { width: 80px; height: 80px; background: #101117; border-color: rgba(255,255,255,.09); display: flex; flex-direction: row; align-items: baseline; justify-content: center; gap: 1px; }
+.jm-score-ring-inner strong { font-size: 26px; letter-spacing: -.06em; }
+.jm-score-ring-inner span { color: #8a909d; font-size: 9px; }
+.jm-score-caption strong, .jm-score-caption span { display: block; }
+.jm-score-caption strong { font-size: 11px; }
+.jm-score-caption span { color: #737987; font-size: 9px; margin-top: 4px; }
+.jm-quick-stats { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; margin-top: 25px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.07); }
+.jm-quick-stat { min-width: 0; display: flex; align-items: center; gap: 9px; padding: 10px 11px; border: 1px solid rgba(255,255,255,.055); border-radius: 12px; background: rgba(7,8,12,.28); }
+.jm-stat-mark { width: 29px; height: 29px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 9px; }
+.jm-stat-mark-match { color: #77e5af; background: rgba(65,214,138,.08); }
+.jm-stat-mark-gap { color: #ff9999; background: rgba(255,104,104,.07); }
+.jm-stat-mark-required { color: #ffcf77; background: rgba(255,182,41,.08); }
+.jm-quick-stat strong, .jm-quick-stat span { display: block; }
+.jm-quick-stat strong { font-size: 17px; line-height: 1.1; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.jm-quick-stat div > span { margin-top: 4px; color: #7d8492; font-size: 9px; }
+
+.jm-breakdown-card, .jm-explorer-card { padding: 21px; }
+.jm-section-heading { margin-bottom: 17px; }
+.jm-section-heading p { margin: 6px 0 0; max-width: 760px; color: #858c9a; font-size: 10px; line-height: 1.6; }
+.jm-heading-icon { width: 35px; height: 35px; flex: 0 0 auto; display: grid; place-items: center; border: 1px solid rgba(255,182,41,.15); border-radius: 11px; color: #f6bf5e; background: rgba(255,182,41,.06); }
+.jm-score-meters { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 11px; }
+.jm-score-meter { min-width: 0; padding: 15px; border: 1px solid rgba(255,255,255,.065); border-radius: 14px; background: linear-gradient(145deg, rgba(255,255,255,.022), rgba(255,255,255,.008)); animation: jmLiftIn .45s ease both; }
+.jm-score-meter:nth-child(2) { animation-delay: 55ms; }
+.jm-score-meter:nth-child(3) { animation-delay: 100ms; }
+.jm-meter-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.jm-meter-symbol { width: 29px; height: 29px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 9px; color: #ffca6b; border: 1px solid rgba(255,182,41,.12); background: rgba(255,182,41,.055); }
+.jm-meter-title { flex: 1; min-width: 0; }
+.jm-meter-title strong, .jm-meter-title small { display: block; }
+.jm-meter-title strong { font-size: 10px; color: #e4e8ef; }
+.jm-meter-title small { margin-top: 3px; font-size: 8px; color: #737a88; }
+.jm-meter-value { flex: 0 0 auto; color: #ffcf79; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.jm-meter-track { height: 7px; overflow: hidden; margin-top: 15px; border-radius: 999px; background: rgba(255,255,255,.065); }
+.jm-meter-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #f59e0b, #ffd16f); animation: jmFillTrack .8s cubic-bezier(.2,.7,.2,1) both; transform-origin: left; }
+.jm-meter-track span.is-empty { background: rgba(255,255,255,.12); }
+.jm-meter-foot { margin-top: 7px; color: #727987; font-size: 8px; }
+.jm-score-note { display: flex; align-items: flex-start; gap: 7px; margin: 14px 0 0; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.055); color: #727a87; font-size: 9px; line-height: 1.5; }
+.jm-score-note svg { flex: 0 0 auto; color: #78b194; }
+
+.jm-explorer-heading { align-items: flex-start; }
+.jm-explorer-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding-top: 5px; }
+.jm-explorer-legend span { display: inline-flex; align-items: center; gap: 5px; color: #838a98; font-size: 9px; white-space: nowrap; }
+.jm-explorer-legend i { width: 7px; height: 7px; display: block; border-radius: 50%; }
+.jm-explorer-legend i.is-match { background: #54d99a; box-shadow: 0 0 9px rgba(65,214,138,.3); }
+.jm-explorer-legend i.is-gap { background: #ff7777; box-shadow: 0 0 9px rgba(255,104,104,.22); }
+.jm-skill-groups { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+.jm-skill-group { position: relative; min-width: 0; overflow: hidden; padding: 15px; border: 1px solid rgba(255,255,255,.065); border-radius: 14px; background: rgba(255,255,255,.016); animation: jmLiftIn .42s ease both; }
+.jm-skill-group:nth-child(2) { animation-delay: 55ms; }
+.jm-skill-group:nth-child(3) { animation-delay: 100ms; }
+.jm-skill-group::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 2px; opacity: .85; background: #ffbd55; }
+.jm-skill-group-required::before { background: #ffc45d; }
+.jm-skill-group-preferred::before { background: #b69aff; }
+.jm-skill-group-general::before { background: #77b9ff; }
+.jm-group-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.jm-group-kicker { display: block; margin-bottom: 5px; color: #888f9c; font-size: 8px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.jm-group-top h4 { margin: 0; color: #e7eaf0; font-size: 13px; letter-spacing: -.02em; }
+.jm-group-fraction { flex: 0 0 auto; text-align: right; }
+.jm-group-fraction strong, .jm-group-fraction span { display: block; }
+.jm-group-fraction strong { color: #f0f2f6; font-size: 13px; font-variant-numeric: tabular-nums; }
+.jm-group-fraction span { margin-top: 2px; color: #747b89; font-size: 8px; }
+.jm-group-track { height: 4px; margin-top: 12px; overflow: hidden; background: rgba(255,255,255,.07); border-radius: 999px; }
+.jm-group-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#3bcf8d,#8ae8b7); animation: jmFillTrack .8s cubic-bezier(.2,.7,.2,1) both; }
+.jm-group-note { min-height: 31px; margin: 8px 0 13px; color: #727a88; font-size: 9px; line-height: 1.5; }
+.jm-signal-block + .jm-signal-block { margin-top: 13px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.055); }
+.jm-signal-label { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; color: #95dfb8; font-size: 9px; font-weight: 800; }
+.jm-signal-label > span { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: auto; border-radius: 999px; background: rgba(255,255,255,.045); color: #9ca2ae; font-size: 8px; font-variant-numeric: tabular-nums; }
+.jm-signal-label-gap { color: #ff9898; }
+.jm-chip-list { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.jm-skill-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 6px 8px; border: 1px solid; border-radius: 999px; font-size: 9px; line-height: 1.3; overflow-wrap: anywhere; }
+.jm-chip-dot { width: 5px; height: 5px; display: block; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
+.jm-skill-chip-match { color: #8be6b6; border-color: rgba(65,214,138,.14); background: rgba(65,214,138,.055); }
+.jm-skill-chip-gap { color: #ff9898; border-color: rgba(255,104,104,.15); background: rgba(255,104,104,.05); }
+.jm-empty-note { color: #646b78; font-size: 9px; line-height: 1.5; }
+.jm-explorer-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 15px; padding-top: 13px; border-top: 1px solid rgba(255,255,255,.055); color: #7a8190; font-size: 9px; }
+.jm-explorer-footer .secondary-button { display: inline-flex; align-items: center; gap: 6px; }
+
+.jm-action-card { position: relative; overflow: hidden; display: flex; align-items: center; gap: 15px; padding: 19px 20px; border-color: rgba(255,182,41,.13); background: radial-gradient(ellipse at 0% 50%, rgba(255,182,41,.065), transparent 38%), rgba(17,18,24,.86); }
+.jm-action-emblem { display: grid; place-items: center; width: 42px; height: 42px; flex: 0 0 auto; border: 1px solid rgba(255,182,41,.2); border-radius: 13px; color: #ffca6b; background: rgba(255,182,41,.08); }
+.jm-action-copy { flex: 1; min-width: 0; }
+.jm-action-copy .eyebrow { margin-bottom: 5px; }
+.jm-action-copy h3 { margin: 0; color: #e9ecf2; font-size: 15px; letter-spacing: -.02em; }
+.jm-action-copy p { margin: 6px 0 0; color: #8b92a0; font-size: 10px; line-height: 1.6; }
+.jm-action-footnote { display: flex; align-items: flex-start; gap: 5px; margin-top: 8px; color: #7eac96; font-size: 8px; line-height: 1.45; }
+.jm-action-footnote svg { flex: 0 0 auto; }
+.jm-action-button { flex: 0 0 auto; }
+
+@keyframes jmLiftIn { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes jmFillTrack { from { transform: scaleX(.02); opacity: .35; } to { transform: scaleX(1); opacity: 1; } }
+@media (max-width: 1080px) {
+  .jm-page-heading { align-items: flex-start; flex-direction: column; }
+  .jm-flow-rail { max-width: 100%; }
+  .jm-skill-groups { grid-template-columns: 1fr 1fr; }
+  .jm-skill-group:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+@media (max-width: 900px) {
+  .jm-score-meters { grid-template-columns: 1fr; }
+  .jm-preview-grid { grid-template-columns: 1fr; }
+  .jm-preview-item { display: grid; grid-template-columns: 34px minmax(0,1fr); column-gap: 10px; align-items: center; padding: 12px; }
+  .jm-preview-number { top: 8px; right: 10px; font-size: 14px; }
+  .jm-preview-glyph { grid-row: span 2; }
+  .jm-preview-item h4 { margin: 0 0 4px; }
+  .jm-preview-item p { grid-column: 2; }
+  .jm-meter-title strong { font-size: 12px; }
+  .jm-meter-title small { font-size: 9px; }
+  .jm-meter-foot { font-size: 9px; }
+}
+@media (max-width: 680px) {
+  .jm-input-card, .jm-hero-card, .jm-breakdown-card, .jm-explorer-card { padding: 15px; }
+  .jm-input-head { flex-direction: column; }
+  .jm-input-limit { margin-left: 52px; }
+  .jm-input-footer { align-items: flex-start; }
+  .jm-input-privacy { flex-basis: 100%; order: 2; }
+  .jm-match-button { width: 100%; }
+  .jm-flow-rail { border-radius: 12px; width: 100%; justify-content: space-between; }
+  .jm-flow-rail span { padding: 7px 6px; font-size: 8px; }
+  .jm-report-kicker { margin-bottom: 17px; }
+  .jm-report-transparency { max-width: 100%; }
+  .jm-hero-main { grid-template-columns: 1fr; gap: 17px; }
+  .jm-hero-copy h3 { font-size: 25px; }
+  .jm-score-display { justify-content: flex-start; }
+  .jm-score-ring { width: 88px; height: 88px; }
+  .jm-score-ring-inner { width: 68px; height: 68px; }
+  .jm-score-ring-inner strong { font-size: 22px; }
+  .jm-quick-stats { grid-template-columns: 1fr; gap: 7px; margin-top: 18px; }
+  .jm-quick-stat { padding: 9px; }
+  .jm-section-heading { gap: 9px; }
+  .jm-section-heading h3, .jm-preview-heading h3 { font-size: 15px; }
+  .jm-explorer-heading { flex-direction: column; }
+  .jm-skill-groups { grid-template-columns: 1fr; }
+  .jm-skill-group:last-child:nth-child(odd) { grid-column: auto; }
+  .jm-group-note { min-height: 0; }
+  .jm-explorer-footer { align-items: flex-start; flex-direction: column; }
+  .jm-action-card { align-items: flex-start; flex-direction: column; padding: 16px; }
+  .jm-action-button { width: 100%; justify-content: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jm-preview-board, .jm-hero-card, .jm-score-meter, .jm-skill-group { animation: none !important; }
+  .jm-meter-track span, .jm-group-track span { animation: none !important; }
+  .jm-preview-item { transition: none; }
+}
+
+/* ResumeAI Job Match Skill Grid Polish v1 */
+.jm-skill-groups-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 680px) {
+  .jm-skill-groups-two { grid-template-columns: 1fr; }
+}
