@@ -1115,41 +1115,150 @@ export default function Dashboard() {
     });
   }, [result]);
 
+  const radarItems = analysisBreakdown.filter((item) => item.max > 0).slice(0, 6);
+
+  const radarPoints = (getValue) => radarItems.map((item, index) => {
+
+    const raw = typeof getValue === "function" ? getValue(item) : getValue;
+
+    const value = Math.max(0, Math.min(1, Number(raw) || 0));
+
+    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / radarItems.length;
+
+    return `${120 + Math.cos(angle) * 88 * value},${120 + Math.sin(angle) * 88 * value}`;
+
+  }).join(" ");
+
+
+
   const renderScoreCard = () => (
-    <section className="da-card score-card">
-      <div className="score-card-top">
+
+    <section id="resume-dna-breakdown" className="da-card dna-breakdown-card">
+
+      <div className="dna-section-heading">
+
         <div>
-          <div className="eyebrow">Resume health</div>
-          <h3>{score ? `${score}/100` : "Not analyzed yet"}</h3>
-          <p>{score ? scoreLabel : "Upload your resume to see your current match estimate."}</p>
-          {(analysisJobRole || latestAnalysis?.job_role) && <span className="score-role">Analysis role · {analysisJobRole || latestAnalysis.job_role}</span>}
+
+          <div className="eyebrow">Resume DNA</div>
+
+          <h3>What makes up your score</h3>
+
+          <p>Explore the actual categories behind your resume-health result.</p>
+
         </div>
-        <div className={`score-ring ${scoreTone}`} style={{ "--score": `${score}%` }}>
-          <div className="score-ring-inner">{score ? score : "—"}</div>
-        </div>
+
+        <span className="dna-section-mark"><BarChart3 size={17} /></span>
+
       </div>
-      <div className="score-progress"><span style={{ width: `${score}%` }} /></div>
-      {analysisBreakdown.length > 0 && (
-        <div className="health-breakdown">
-          {analysisBreakdown.map((item) => (
-            <div className="health-item" key={item.key}>
-              <div className="health-item-top">
+
+
+
+      <div className={`dna-breakdown-layout ${radarItems.length >= 3 ? "has-radar" : ""}`}>
+
+        <div className="dna-category-list">
+
+          {analysisBreakdown.length ? analysisBreakdown.map((item) => (
+
+            <div className="dna-category-item" key={item.key}>
+
+              <div className="dna-category-top">
+
                 <span>{item.label}</span>
+
                 <strong>{item.score}{item.max ? ` / ${item.max}` : ""}</strong>
+
               </div>
+
               {item.max > 0 && (
-                <div className="health-mini-progress">
+
+                <div className="dna-category-track" role="img"
+
+                  aria-label={`${item.label}: ${Math.round(item.percent)} percent`}>
+
                   <span style={{ width: `${item.percent}%` }} />
+
                 </div>
+
               )}
+
             </div>
-          ))}
+
+          )) : <p className="dna-empty-state">Category breakdown is unavailable for this result.</p>}
+
         </div>
-      )}
-      <div className="score-footnote">
-        <ShieldCheck size={15} /> Score is calculated by ResumeAI's deterministic compatibility engine; AI is used for explanations and recommendations.
+
+
+
+        {radarItems.length >= 3 && (
+
+          <div className="dna-radar-panel">
+
+            <div className="dna-radar-heading">
+
+              <div><div className="eyebrow">Profile shape</div><strong>Category map</strong></div>
+
+              <span className="dna-radar-dot" />
+
+            </div>
+
+            <svg className="dna-radar-chart" viewBox="0 0 240 240" role="img"
+
+              aria-label={`Radar chart showing ${radarItems.length} resume score categories`}>
+
+              <title>Normalized resume category scores</title>
+
+              {[0.25, 0.5, 0.75, 1].map((scale) => (
+
+                <polygon key={scale} className="dna-radar-grid" points={radarPoints(scale)} />
+
+              ))}
+
+              {radarItems.map((item, index) => {
+
+                const angle = -Math.PI / 2 + (Math.PI * 2 * index) / radarItems.length;
+
+                return <line key={item.key} className="dna-radar-axis" x1="120" y1="120"
+
+                  x2={120 + Math.cos(angle) * 88} y2={120 + Math.sin(angle) * 88} />;
+
+              })}
+
+              <polygon className="dna-radar-data"
+
+                points={radarPoints((item) => item.percent / 100)} />
+
+              {radarItems.map((item, index) => {
+
+                const angle = -Math.PI / 2 + (Math.PI * 2 * index) / radarItems.length;
+
+                const radius = 88 * Math.max(0, Math.min(1, item.percent / 100));
+
+                return <circle key={item.key} className="dna-radar-point"
+
+                  cx={120 + Math.cos(angle) * radius} cy={120 + Math.sin(angle) * radius} r="3.5" />;
+
+              })}
+
+            </svg>
+
+            <p className="dna-radar-footnote">The chart uses the normalized category scores shown alongside.</p>
+
+          </div>
+
+        )}
+
       </div>
+
+
+
+      <div className="dna-method-note"><ShieldCheck size={15} />
+
+        Score is calculated by ResumeAI's deterministic compatibility engine; AI is used for explanations and recommendations.
+
+      </div>
+
     </section>
+
   );
 
   const renderUploadPanel = (compact = false) => (
@@ -1376,25 +1485,450 @@ export default function Dashboard() {
     );
   };
 
-  const renderAnalyze = () => (
-    <div className="tab-content-active stack-lg">
-      <div className="page-heading"><div><div className="eyebrow">Analyze</div><h2>Understand your resume before you apply.</h2><p>Get a transparent compatibility estimate for your selected role.</p></div></div>
-      {renderUploadPanel(true)}
-      {renderRoleCard()}
-      <div className="action-row"><button className="primary-button" onClick={handleAnalyze} disabled={loading || !hasResume}>{loading ? <><RefreshCw size={16} className="spin" /> {loaderText}</> : <><BarChart3 size={16} /> Analyze resume</>}</button></div>
-      {result && (
-        <div className="result-stack">
-          {renderScoreCard()}
-          <div className="result-grid">
-            <section className="da-card result-list-card"><div className="section-header"><div><div className="eyebrow">What is working</div><h3>Strengths</h3></div><CheckCircle2 size={18} className="success-icon" /></div>{result.strengths?.map((item, i) => <div className="bullet-row" key={i}><CheckCircle2 size={15} /> <span>{item}</span></div>)}</section>
-            <section className="da-card result-list-card"><div className="section-header"><div><div className="eyebrow">What to improve</div><h3>Priority fixes</h3></div><AlertCircle size={18} className="warning-icon" /></div>{result.improvements?.map((item, i) => <div className="bullet-row warning" key={i}><AlertCircle size={15} /> <span>{item}</span></div>)}</section>
+  const renderAnalyze = () => {
+
+    const scrollToReportSection = (id) => {
+
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    };
+
+
+
+    return (
+
+      <div className="tab-content-active stack-lg">
+
+        <div className="page-heading">
+
+          <div>
+
+            <div className="eyebrow">Analyze</div>
+
+            <h2>Understand your resume before you apply.</h2>
+
+            <p>Get a transparent compatibility estimate for your selected role.</p>
+
           </div>
-          {!!result.missing_keywords?.length && <section className="da-card keyword-card"><div className="eyebrow">Keywords</div><h3>Missing or underrepresented terms</h3><div className="chip-wrap">{result.missing_keywords.map((item, i) => <span className="chip danger" key={i}>{item}</span>)}</div></section>}
-          {!!result.improved_bullets?.length && <section className="da-card keyword-card"><div className="eyebrow">AI-assisted edits</div><h3>Bullet improvements</h3>{result.improved_bullets.map((b, i) => <div className="before-after" key={i}><div><span>Original</span><p>{b.original || b.before}</p></div><ArrowRight size={16} className="before-after-arrow" /><div className="after"><span>Improved</span><p>{b.improved || b.after}</p></div></div>)}</section>}
+
         </div>
-      )}
-    </div>
-  );
+
+
+
+        {renderUploadPanel(true)}
+
+        {renderRoleCard()}
+
+
+
+        <div className="action-row">
+
+          <button className="primary-button" onClick={handleAnalyze} disabled={loading || !hasResume}>
+
+            {loading
+
+              ? <><RefreshCw size={16} className="spin" /> {loaderText}</>
+
+              : <><BarChart3 size={16} /> Analyze resume</>}
+
+          </button>
+
+        </div>
+
+
+
+        {result && (
+
+          <div className="result-stack dna-report">
+
+            <section className="dna-hero">
+
+              <div className="dna-hero-top">
+
+                <div className="dna-hero-copy">
+
+                  <div className="dna-hero-kicker"><Sparkles size={15} /> RESUME DNA <span>/</span> CAREER INTELLIGENCE</div>
+
+                  <h2>Know what your resume is signalling.</h2>
+
+                  <p>A clearer view of your strengths, gaps, and the next improvements worth your attention.</p>
+
+                  <div className="dna-hero-pills">
+
+                    <span><Target size={14} /> {analysisJobRole || jobRole || "Selected role"}</span>
+
+                    <span><ShieldCheck size={14} /> Evidence-led score breakdown</span>
+
+                  </div>
+
+                </div>
+
+                <div className="dna-score-feature">
+
+                  <div className={`dna-main-ring ${scoreTone}`} style={{ "--score": `${score}%` }}>
+
+                    <div className="dna-main-ring-inner"><strong>{score || "—"}</strong><span>/100</span></div>
+
+                  </div>
+
+                  <div className="dna-score-caption">
+
+                    <span>RESUME HEALTH</span>
+
+                    <strong>{score ? scoreLabel : "Analysis ready"}</strong>
+
+                    <small>Compatibility estimate</small>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+
+
+              <div className="dna-metric-strip">
+
+                <div className="dna-metric"><span>Strength signals</span><strong>{result.strengths?.length || 0}</strong><small>What is working</small></div>
+
+                <div className="dna-metric"><span>Priority fixes</span><strong>{result.improvements?.length || 0}</strong><small>Where to focus</small></div>
+
+                <div className="dna-metric"><span>Keywords to review</span><strong>{result.missing_keywords?.length || 0}</strong><small>Terms to assess</small></div>
+
+                <div className="dna-metric"><span>Bullet examples</span><strong>{result.improved_bullets?.length || 0}</strong><small>Suggested rewrites</small></div>
+
+              </div>
+
+            </section>
+
+
+
+            <nav className="dna-report-nav" aria-label="Resume report sections">
+
+              <button type="button" onClick={() => scrollToReportSection("resume-dna-breakdown")}><BarChart3 size={15} /> Resume DNA</button>
+
+              <button type="button" onClick={() => scrollToReportSection("dna-strengths")}><CheckCircle2 size={15} /> Strengths & fixes</button>
+
+              {!!result.missing_keywords?.length && <button type="button" onClick={() => scrollToReportSection("dna-keywords")}><Target size={15} /> Keywords</button>}
+
+              {!!result.improved_bullets?.length && <button type="button" onClick={() => scrollToReportSection("dna-bullet-lab")}><FileText size={15} /> Bullet lab</button>}
+
+            </nav>
+
+
+
+            {renderScoreCard()}
+
+
+
+            <div id="dna-strengths" className="result-grid dna-feedback-grid dna-insight-viz-grid">{/* ANALYSIS_INSIGHT_VISUALIZATION_V1 */}
+              <section className="da-card result-list-card dna-feedback-card dna-strengths-card">
+                <div className="dna-insight-heading">
+                  <div className="dna-insight-heading-copy">
+                    <div className="eyebrow">STRENGTH SIGNALS Â· {result.strengths?.length || 0} FOUND</div>
+                    <h3>Your strengths, visualized</h3>
+                    <p>Evidence signals found in your resume for this analysis.</p>
+                  </div>
+                  <div className="dna-strength-emblem" aria-hidden="true">
+                    <span className="dna-strength-emblem-ring dna-strength-emblem-ring-a" />
+                    <span className="dna-strength-emblem-ring dna-strength-emblem-ring-b" />
+                    <span className="dna-strength-emblem-core"><CheckCircle2 size={17} /></span>
+                    <span className="dna-strength-emblem-spark">+</span>
+                  </div>
+                </div>
+                {result.strengths?.length ? (
+                  <div className="dna-strength-map">
+                    {result.strengths.map((item, i) => (
+                      <article className="dna-strength-node" key={i} style={{ animationDelay: `${Math.min(i, 8) * 65}ms` }}>
+                        <span className="dna-strength-index">{String(i + 1).padStart(2, "0")}</span>
+                        <div className="dna-strength-node-copy">
+                          <span className="dna-strength-node-label">STRENGTH SIGNAL</span>
+                          <p>{item}</p>
+                          <span className="dna-signal-pips" aria-hidden="true"><i /><i /><i /></span>
+                        </div>
+                        <CheckCircle2 size={15} className="dna-strength-check" />
+                      </article>
+                    ))}
+                  </div>
+                ) : <p className="dna-empty-state">No strengths were returned for this analysis.</p>}
+                <div className="dna-insight-footnote"><ShieldCheck size={13} /> Based on this analysis; no extra strength scores are inferred.</div>
+              </section>
+
+              <section className="da-card result-list-card dna-feedback-card dna-opportunities-card">
+                <div className="dna-insight-heading">
+                  <div className="dna-insight-heading-copy">
+                    <div className="eyebrow">POTENTIAL NEXT MOVES Â· {result.improvements?.length || 0} SUGGESTIONS</div>
+                    <h3>Where you can level up</h3>
+                    <p>Explore the suggested focus areas in the order returned by your analysis.</p>
+                  </div>
+                  <div className="dna-focus-emblem" aria-hidden="true"><span /><span /><span /><AlertCircle size={17} /></div>
+                </div>
+                {result.improvements?.length ? (
+                  <div className="dna-focus-path">
+                    {result.improvements.map((item, i) => (
+                      <article className="dna-focus-step" key={i} style={{ animationDelay: `${Math.min(i, 8) * 75}ms` }}>
+                        <span className="dna-focus-index">{String(i + 1).padStart(2, "0")}</span>
+                        <div className="dna-focus-copy">
+                          <span className="dna-focus-label">FOCUS AREA</span>
+                          <p>{item}</p>
+                        </div>
+                        <span className="dna-focus-marker" aria-hidden="true"><ChevronRight size={14} /></span>
+                      </article>
+                    ))}
+                  </div>
+                ) : <p className="dna-empty-state">No improvement suggestions were returned for this analysis.</p>}
+                <div className="dna-insight-footnote dna-focus-footnote"><AlertCircle size={13} /> Suggestions, not a severity ranking. Verify each one against your actual experience.</div>
+              </section>
+            </div>
+
+
+
+            {!!result.missing_keywords?.length && (
+              <section id="dna-keywords" className="da-card keyword-card dna-keyword-card dna-keyword-explorer">
+                <div className="dna-keyword-explorer-head">
+                  <div className="dna-keyword-heading-copy">
+                    <div className="eyebrow">KEYWORD EXPLORER Â· {result.missing_keywords.length} TO REVIEW</div>
+                    <h3>Signals worth investigating</h3>
+                    <p>Open a term to ask yourself where it fits. Only add it if your experience supports it.</p>
+                  </div>
+                  <div className="dna-keyword-orbit" aria-hidden="true">
+                    <span className="dna-keyword-orbit-ring dna-keyword-orbit-ring-one" />
+                    <span className="dna-keyword-orbit-ring dna-keyword-orbit-ring-two" />
+                    <span className="dna-keyword-orbit-core"><Target size={18} /></span>
+                    <span className="dna-keyword-orbit-dot" />
+                  </div>
+                </div>
+                <div className="dna-keyword-grid">
+                  {result.missing_keywords.map((item, i) => (
+                    <details className="dna-keyword-node" key={`${item}-${i}`} style={{ animationDelay: `${Math.min(i, 12) * 45}ms` }}>
+                      <summary>
+                        <span className="dna-keyword-index">{String(i + 1).padStart(2, "0")}</span>
+                        <span className="dna-keyword-term">{item}</span>
+                        <span className="dna-keyword-state">NOT DETECTED</span>
+                        <ChevronRight size={14} className="dna-keyword-chevron" />
+                      </summary>
+                      <div className="dna-keyword-detail">
+                        <span>CHECK YOUR EVIDENCE</span>
+                        <p>Can you point to a real project, coursework, or experience that demonstrates this term? If yes, add it where it fits truthfully; otherwise, leave it out.</p>
+                      </div>
+                    </details>
+                  ))}
+                </div>
+                <div className="dna-insight-footnote dna-keyword-footnote"><ShieldCheck size={13} /> These are terms to review, not terms you must add.</div>
+              </section>
+            )}
+
+
+
+            {!!result.improved_bullets?.length && (
+
+              <section id="dna-bullet-lab" className="da-card keyword-card dna-bullet-card">
+
+                <div className="dna-section-heading">
+
+                  <div><div className="eyebrow">Bullet lab</div><h3>Find the stronger signal</h3>
+
+                    <p>Start with a point from your resume. Reveal a possible refinement, inspect the highlighted wording, and decide what deserves to stay.</p>
+
+                  </div>
+
+                  <span className="dna-section-mark"><FileText size={17} /></span>
+
+                </div>
+
+                {result.improved_bullets.map((b, i) => {
+                  const originalText = String(b.original || b.before || "").trim();
+                  const improvedText = String(b.improved || b.after || "").trim();
+                  // STORY_REVEAL_SMART_CLASSIFICATION_V1
+                  // Compare normalized word sequences so punctuation/case-only differences
+                  // do not masquerade as real improvements (for example, adding/removing a period).
+                  const tokenizeBullet = (value) => String(value || "").toLowerCase().match(/[a-z0-9]+(?:[+#./-][a-z0-9]+)*/g) || [];
+                  const originalWords = tokenizeBullet(originalText);
+                  const improvedWords = tokenizeBullet(improvedText);
+                  const originalSet = new Set(originalWords);
+                  const improvedSet = new Set(improvedWords);
+                  const addedTerms = [...new Set(improvedWords.filter((word) => !originalSet.has(word)))];
+                  const removedTerms = [...new Set(originalWords.filter((word) => !improvedSet.has(word)))];
+                  const changedTermCount = addedTerms.length + removedTerms.length;
+                  const normalizedOriginal = originalWords.join(" ");
+                  const normalizedImproved = improvedWords.join(" ");
+                  const isAlreadyStrong = normalizedOriginal === normalizedImproved;
+
+                  // Word-level Levenshtein distance estimates how much of the sentence changed.
+                  let editRow = Array.from({ length: improvedWords.length + 1 }, (_, index) => index);
+                  for (let rowIndex = 1; rowIndex <= originalWords.length; rowIndex += 1) {
+                    const nextRow = [rowIndex];
+                    for (let colIndex = 1; colIndex <= improvedWords.length; colIndex += 1) {
+                      const substitutionCost = originalWords[rowIndex - 1] === improvedWords[colIndex - 1] ? 0 : 1;
+                      nextRow[colIndex] = Math.min(
+                        nextRow[colIndex - 1] + 1,
+                        editRow[colIndex] + 1,
+                        editRow[colIndex - 1] + substitutionCost
+                      );
+                    }
+                    editRow = nextRow;
+                  }
+                  const wordEditDistance = editRow[improvedWords.length];
+                  const changeRatio = wordEditDistance / Math.max(originalWords.length, improvedWords.length, 1);
+                  // A meaningful label requires several changed terms and a substantial edit.
+                  // Reordering alone or a single synonym swap is not advertised as a strong rewrite.
+                                    // STORY_REVEAL_CLASSIFICATION_GUARD_V2
+                  // A stronger label needs more than a handful of synonym substitutions.
+                  // Preserve numeric evidence, acronyms, and multi-word scope indicators.
+                  const sourceNumbers = originalText.match(/(?<![a-z])\d+(?:\.\d+)?\s*(?:%|percent)?(?![a-z])/gi) || [];
+                  const suggestedLower = improvedText.toLowerCase();
+                  const missingSourceNumbers = sourceNumbers.filter((value) => !suggestedLower.includes(value.toLowerCase().replace(/\s+/g, "")));
+                  const sourceAcronyms = originalText.match(/\b[A-Z]{2,}(?:-[A-Z0-9]+)*\b/g) || [];
+                  const missingSourceAcronyms = sourceAcronyms.filter((value) => !suggestedLower.includes(value.toLowerCase()));
+                  const scopeTerms = new Set(["across", "multiple", "several", "various", "throughout", "within", "observation", "observations", "window", "windows", "dataset", "datasets", "sample", "samples", "experiment", "experiments", "iteration", "iterations", "fold", "folds", "records", "regions", "locations", "scenarios"]);
+                  const missingScopeTerms = [...new Set(originalWords.filter((word) => scopeTerms.has(word) && !improvedWords.includes(word)))];
+                  const hasSourceDetailLoss = missingSourceNumbers.length > 0 || missingSourceAcronyms.length > 0 || missingScopeTerms.length >= 2;
+
+                  // Require a large edit ratio; a few verb swaps should remain a light wording change.
+                  const meaningfulRewrite = !isAlreadyStrong && !hasSourceDetailLoss && changedTermCount >= 6 && wordEditDistance >= 5 && changeRatio >= 0.30;
+                  const statusLabel = isAlreadyStrong
+                    ? "Already strong"
+                    : hasSourceDetailLoss
+                      ? "Review source details"
+                      : meaningfulRewrite
+                        ? "Restructured rewrite"
+                        : "Small wording change";
+                  const revealLabel = hasSourceDetailLoss
+                    ? "Review source details"
+                    : meaningfulRewrite
+                      ? "Reveal the restructured version"
+                      : "Reveal the wording option";
+                  // STORY_REVEAL_ACCURATE_DIFF_V2
+                  // LCS highlights added/reordered wording in the suggestion using the same
+                  // tokenizer as classification (so compounds like full-stack/INSAT-3D stay intact).
+                  const unmatchedImprovedWordIndexes = new Set();
+                  const diffTable = Array.from(
+                    { length: originalWords.length + 1 },
+                    () => Array(improvedWords.length + 1).fill(0)
+                  );
+                  for (let sourceIndex = originalWords.length - 1; sourceIndex >= 0; sourceIndex -= 1) {
+                    for (let suggestedIndex = improvedWords.length - 1; suggestedIndex >= 0; suggestedIndex -= 1) {
+                      diffTable[sourceIndex][suggestedIndex] = originalWords[sourceIndex] === improvedWords[suggestedIndex]
+                        ? 1 + diffTable[sourceIndex + 1][suggestedIndex + 1]
+                        : Math.max(diffTable[sourceIndex + 1][suggestedIndex], diffTable[sourceIndex][suggestedIndex + 1]);
+                    }
+                  }
+                  let sourceCursor = 0;
+                  let suggestedCursor = 0;
+                  while (sourceCursor < originalWords.length && suggestedCursor < improvedWords.length) {
+                    if (originalWords[sourceCursor] === improvedWords[suggestedCursor]) {
+                      sourceCursor += 1;
+                      suggestedCursor += 1;
+                    } else if (diffTable[sourceCursor + 1][suggestedCursor] >= diffTable[sourceCursor][suggestedCursor + 1]) {
+                      sourceCursor += 1;
+                    } else {
+                      unmatchedImprovedWordIndexes.add(suggestedCursor);
+                      suggestedCursor += 1;
+                    }
+                  }
+                  while (suggestedCursor < improvedWords.length) {
+                    unmatchedImprovedWordIndexes.add(suggestedCursor);
+                    suggestedCursor += 1;
+                  }
+
+                  // Flag source words only when their occurrence count is not preserved in the suggestion.
+                  // This avoids treating simple reordering as lost source detail.
+                  const improvedWordFrequency = new Map();
+                  improvedWords.forEach((word) => improvedWordFrequency.set(word, (improvedWordFrequency.get(word) || 0) + 1));
+                  const seenSourceWordFrequency = new Map();
+                  const omittedOriginalWordIndexes = new Set();
+                  originalWords.forEach((word, wordIndex) => {
+                    const seen = seenSourceWordFrequency.get(word) || 0;
+                    if (seen >= (improvedWordFrequency.get(word) || 0)) omittedOriginalWordIndexes.add(wordIndex);
+                    seenSourceWordFrequency.set(word, seen + 1);
+                  });
+
+                  let renderedWordIndex = 0;
+                  const highlightedImprovedText = improvedText.split(/(\s+)/).map((part, partIndex) => {
+                    const partTokens = part.toLowerCase().match(/[a-z0-9]+(?:[+#./-][a-z0-9]+)*/g) || [];
+                    const containsChangedWord = partTokens.some((_, offset) => unmatchedImprovedWordIndexes.has(renderedWordIndex + offset));
+                    renderedWordIndex += partTokens.length;
+                    return containsChangedWord
+                      ? <mark className="rewrite-changed-word" key={partIndex}>{part}</mark>
+                      : <span key={partIndex}>{part}</span>;
+                  });
+                  let renderedSourceWordIndex = 0;
+                  const highlightedOriginalText = originalText
+                    ? originalText.split(/(\s+)/).map((part, partIndex) => {
+                        const partTokens = part.toLowerCase().match(/[a-z0-9]+(?:[+#./-][a-z0-9]+)*/g) || [];
+                        const containsOmittedWord = partTokens.some((_, offset) => omittedOriginalWordIndexes.has(renderedSourceWordIndex + offset));
+                        renderedSourceWordIndex += partTokens.length;
+                        return containsOmittedWord
+                          ? <mark className="rewrite-omitted-word" key={partIndex}>{part}</mark>
+                          : <span key={partIndex}>{part}</span>;
+                      })
+                    : "No source text was returned.";
+
+                  return (
+                    <article className={`rewrite-spotlight ${hasSourceDetailLoss ? "is-review" : meaningfulRewrite ? "is-meaningful" : isAlreadyStrong ? "is-strong" : "is-light"}`} key={`${i}-${originalText.slice(0, 24)}`}>
+                      <div className="rewrite-spotlight-head">
+                        <div className="rewrite-point-id"><span className="rewrite-point-orb"><Sparkles size={14} /></span><span>RESUME SIGNAL <strong>{String(i + 1).padStart(2, "0")}</strong></span></div>
+                        <span className={`rewrite-status ${isAlreadyStrong ? "status-strong" : hasSourceDetailLoss ? "status-review" : meaningfulRewrite ? "status-ready" : "status-light"}`}>{statusLabel}</span>
+                      </div>
+
+                      <div className="rewrite-source-block">
+                        <div className="rewrite-label-row"><span>FOUND IN YOUR RESUME</span><span className="rewrite-source-mark">SOURCE</span></div>
+                        <p>{originalText || "No source text was returned."}</p>
+                      </div>
+
+                      {isAlreadyStrong ? (
+                        <div className="rewrite-already-note">
+                          <CheckCircle2 size={16} />
+                          <div><strong>This point is already clear.</strong><p>The suggestion adds no meaningful wording change. Keep the original instead of rewriting for the sake of it.</p></div>
+                          <button type="button" className="rewrite-copy-button rewrite-copy-muted" onClick={() => navigator.clipboard?.writeText(originalText).then(() => toast.success("Original bullet copied")).catch(() => toast.error("Copy failed; please select the text manually."))}><ClipboardPaste size={14} /> Copy original</button>
+                        </div>
+                      ) : (
+                        <details name="resumeai-story-reveal" className="rewrite-reveal" open={i === result.improved_bullets.findIndex((candidate) => { const source = String(candidate.original || candidate.before || "").toLowerCase().match(/[a-z0-9]+(?:[+#./-][a-z0-9]+)*/g) || []; const proposed = String(candidate.improved || candidate.after || "").toLowerCase().match(/[a-z0-9]+(?:[+#./-][a-z0-9]+)*/g) || []; return source.join(" ") !== proposed.join(" "); })}>
+                          <summary>
+                            <span className="rewrite-reveal-glyph"><Sparkles size={16} /></span>
+                            <span className="rewrite-reveal-summary"><strong>{revealLabel}</strong><small>{hasSourceDetailLoss ? "The suggested version may omit source scope or evidence. Review the flagged source wording first." : meaningfulRewrite ? "The sentence has been reworked. Check that the facts and ownership still match your experience." : "Only a small wording change. Open it to decide whether the edit genuinely helps."}</small></span>
+                            <span className="rewrite-reveal-action">REVEAL <ChevronRight size={15} /></span>
+                          </summary>
+                          <div className="rewrite-reveal-content">
+                            <div className="rewrite-output-top"><span className="rewrite-output-label">POSSIBLE REWRITE</span><span className="rewrite-review-badge"><ShieldCheck size={12} /> REVIEW BEFORE USING</span></div>
+                            <p className="rewrite-output-text">{highlightedImprovedText}</p>
+                            {!!omittedOriginalWordIndexes.size && (
+                              <div className="rewrite-omission-check">
+                                <div className="rewrite-omission-head"><strong>Source wording to check</strong><span>NOT CARRIED OVER VERBATIM</span></div>
+                                <p>{highlightedOriginalText}</p>
+                                <small>Highlighted source terms are missing from this version. Check that no important scope, method, or evidence was lost before copying it.</small>
+                              </div>
+                            )}
+                            <div className="rewrite-diff-key"><span className="rewrite-diff-swatch" /> Gold highlights show words added or reworked in the suggestion. Rose highlights show source wording not carried over verbatim. Check both before using the rewrite.</div>
+                            <div className="rewrite-review-lenses">
+                              <div><span>01 / CLARITY</span><p>Can a recruiter understand the contribution quickly?</p></div>
+                              <div><span>02 / OWNERSHIP</span><p>Does the action reflect what you personally did?</p></div>
+                              <div><span>03 / EVIDENCE</span><p>Keep tools, scope and metrics only when accurate.</p></div>
+                            </div>
+                            <div className="rewrite-reveal-footer">
+                              <button type="button" className="rewrite-copy-button" onClick={() => navigator.clipboard?.writeText(improvedText).then(() => toast.success("Suggested bullet copied")).catch(() => toast.error("Copy failed; please select the text manually."))}><ClipboardPaste size={14} /> Copy suggested version</button>
+                              <span><ShieldCheck size={14} /> You stay in control of the final wording.</span>
+                            </div>
+                          </div>
+                        </details>
+                      )}
+                    </article>
+                  );
+                })}
+
+              </section>
+
+            )}
+
+          </div>
+
+        )}
+
+      </div>
+
+    );
+
+  };
 
   const renderRewrite = () => {
     const isStructuredResume = Boolean(
@@ -1462,6 +1996,7 @@ export default function Dashboard() {
     );
   };
 
+  /* RESUMEAI_JOB_MATCH_EXPERIENCE_V1 */
   const renderJD = () => {
     const requiredMatched = jdResult?.matched_required || [];
     const requiredMissing = jdResult?.missing_required || [];
@@ -1472,105 +2007,191 @@ export default function Dashboard() {
     const requiredScore = jdResult?.score_breakdown?.required_skills || { score: 0, max: 70 };
     const preferredScore = jdResult?.score_breakdown?.preferred_skills || { score: 0, max: 20 };
     const generalScore = jdResult?.score_breakdown?.general_alignment || { score: 0, max: 10 };
+    const matchScore = Math.max(0, Math.min(100, Number(jdResult?.match_score) || 0));
+    const totalRequired = requiredMatched.length + requiredMissing.length;
+
+    const allMatched = [...new Set([...requiredMatched, ...preferredMatched, ...generalMatched])];
+    const allMissing = [...new Set([...requiredMissing, ...preferredMissing, ...generalMissing])];
+    const scoreTone = matchScore >= 80 ? 'success' : matchScore >= 60 ? 'warm' : 'danger';
+    const fitLabel = matchScore >= 80 ? 'Strong overlap' : matchScore >= 60 ? 'Promising overlap' : 'Needs tailoring';
+    const fitHeadline = matchScore >= 80
+      ? "Your resume speaks this role's language."
+      : matchScore >= 60
+        ? 'You have a foundation to build on.'
+        : 'There are clear gaps to work through.';
 
     const SkillChips = ({ items, tone }) => (
-      <div className="chip-wrap">
-        {items.length ? items.map((k, i) => (
-          <span className={`chip ${tone}`} key={`${k}-${i}`}>{k}</span>
-        )) : <span className="jd-empty-chip">None detected</span>}
+      <div className={`jm-chip-list ${items.length ? '' : 'is-empty'}`}>
+        {items.length ? items.map((skill, index) => (
+          <span className={`jm-skill-chip jm-skill-chip-${tone}`} key={`${skill}-${index}`}>
+            <span className="jm-chip-dot" />{skill}
+          </span>
+        )) : <span className="jm-empty-note">No signals detected in this category</span>}
       </div>
     );
 
-    const ScoreBar = ({ label, score: value, max }) => {
-      const detected = Number(max) > 0;
-      const pct = detected ? Math.max(0, Math.min(100, Math.round((value / max) * 100))) : 0;
+    const ScoreMeter = ({ label, caption, score, max, icon }) => {
+      const hasData = Number(max) > 0;
+      const percentage = hasData ? Math.max(0, Math.min(100, Math.round((Number(score) / Number(max)) * 100))) : 0;
       return (
-        <div className="jd-score-bar-row">
-          <div className="jd-score-bar-meta">
-            <span>{label}</span>
-            <strong>{detected ? `${value}/${max}` : "Not detected"}</strong>
+        <div className="jm-score-meter">
+          <div className="jm-meter-head">
+            <span className="jm-meter-symbol">{icon}</span>
+            <div className="jm-meter-title"><strong>{label}</strong><small>{caption}</small></div>
+            <span className="jm-meter-value">{hasData ? `${score}/${max}` : '—'}</span>
           </div>
-          <div className="jd-score-bar"><span style={{ width: `${pct}%` }} /></div>
+          <div className="jm-meter-track" role="img" aria-label={`${label}: ${hasData ? `${percentage}%` : 'not detected'}`}>
+            <span className={hasData ? '' : 'is-empty'} style={{ width: `${percentage}%` }} />
+          </div>
+          <div className="jm-meter-foot">{hasData ? `${percentage}% of available category points` : 'No category score available'}</div>
         </div>
       );
     };
 
+    const SkillGroup = ({ title, kicker, matched, missing, note, tone }) => {
+      const total = matched.length + missing.length;
+      const coverage = total ? Math.round((matched.length / total) * 100) : 0;
+      return (
+        <article className={`jm-skill-group jm-skill-group-${tone}`}>
+          <div className="jm-group-top">
+            <div><span className="jm-group-kicker">{kicker}</span><h4>{title}</h4></div>
+            <div className="jm-group-fraction"><strong>{total ? `${matched.length}/${total}` : '—'}</strong><span>matched</span></div>
+          </div>
+          <div className="jm-group-track" role="img" aria-label={`${title} coverage: ${total ? `${coverage}%` : 'not detected'}`}>
+            <span style={{ width: `${coverage}%` }} />
+          </div>
+          <p className="jm-group-note">{note}</p>
+          <div className="jm-signal-block">
+            <div className="jm-signal-label jm-signal-label-match"><CheckCircle2 size={14} /> In your resume <span>{matched.length}</span></div>
+            <SkillChips items={matched} tone="match" />
+          </div>
+          <div className="jm-signal-block jm-signal-block-missing">
+            <div className="jm-signal-label jm-signal-label-gap"><AlertCircle size={14} /> Missing or underrepresented <span>{missing.length}</span></div>
+            <SkillChips items={missing} tone="gap" />
+          </div>
+        </article>
+      );
+    };
+
+    const copyMissingSignals = async () => {
+      if (!allMissing.length) {
+        toast.error('No missing skill signals to copy');
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(allMissing.join(', '));
+        toast.success('Missing skill signals copied');
+      } catch {
+        toast.error('Could not copy automatically. Select the keywords and copy them manually.');
+      }
+    };
+
     return (
-      <div className="tab-content-active stack-lg">
-        <div className="page-heading">
+      <div className="tab-content-active stack-lg jm-workspace">
+        <div className="page-heading jm-page-heading">
           <div>
-            <div className="eyebrow">Job match</div>
-            <h2>See how your resume fits a specific opportunity.</h2>
-            <p>Compare the role's requirements, identify gaps, and decide what to improve next.</p>
+            <div className="eyebrow">Opportunity intelligence / 02</div>
+            <h2>Find your strongest fit.</h2>
+            <p>See what already aligns, what the role still asks for, and where your next improvement will matter most.</p>
+          </div>
+          <div className="jm-flow-rail" aria-label="Job match workflow">
+            <span className="is-current"><b>01</b> Compare</span>
+            <span><b>02</b> Explore gaps</span>
+            <span><b>03</b> Take action</span>
           </div>
         </div>
+
         {renderUploadPanel(true)}
-        <section className="da-card form-card">
-          <div className="field-label"><ClipboardPaste size={16} /> Job description</div>
-          <textarea value={jdText} onChange={(e) => setJdText(e.target.value)} className="da-textarea" placeholder="Paste the full job description here..." />
-          <div className="form-footer">
-            <span>{jdText.length}/30,000 characters</span>
-            <button className="primary-button" onClick={handleJDMatch} disabled={jdLoading || !hasResume || !jdText.trim()}>
-              {jdLoading ? <><RefreshCw size={16} className="spin" /> Matching...</> : <><Target size={16} /> Match this job</>}
+
+        <section className="da-card jm-input-card">
+          <div className="jm-input-head">
+            <div className="jm-input-title-wrap">
+              <span className="jm-input-icon"><ClipboardPaste size={18} /></span>
+              <div>
+                <div className="eyebrow">Role brief</div>
+                <h3>Bring the job description into focus.</h3>
+                <p>Paste the full posting so ResumeAI can compare its requirements against the evidence in your resume.</p>
+              </div>
+            </div>
+            <span className="jm-input-limit">Up to 30,000 characters</span>
+          </div>
+          <textarea value={jdText} onChange={(event) => setJdText(event.target.value)} className="da-textarea jm-job-textarea" placeholder="Paste the job description here — responsibilities, required skills, preferred skills, and qualifications…" aria-label="Job description" />
+          <div className="jm-input-footer">
+            <span className={`jm-char-count ${jdText.length > 30000 ? 'is-over-limit' : ''}`}>{jdText.length.toLocaleString()} <span>/ 30,000 characters</span></span>
+            <span className="jm-input-privacy"><ShieldCheck size={14} /> Match score uses detected resume and job-description evidence.</span>
+            <button className="primary-button jm-match-button" onClick={handleJDMatch} disabled={jdLoading || !hasResume || !jdText.trim()}>
+              {jdLoading ? <><RefreshCw size={16} className="spin" /> Reading requirements...</> : <><Target size={16} /> Reveal job fit <ArrowRight size={15} /></>}
             </button>
           </div>
         </section>
 
+        {!jdResult && (
+          <section className="jm-preview-board" aria-label="What the job match report includes">
+            <div className="jm-preview-heading"><div><div className="eyebrow">What you'll discover</div><h3>Not just a percentage. A plan.</h3></div><span className="jm-preview-lockup"><Sparkles size={16} /> Match intelligence</span></div>
+            <div className="jm-preview-grid">
+              <article className="jm-preview-item"><span className="jm-preview-number">01</span><div className="jm-preview-glyph"><Target size={17} /></div><h4>Where you align</h4><p>See the required and preferred skills already evidenced in your resume.</p></article>
+              <article className="jm-preview-item"><span className="jm-preview-number">02</span><div className="jm-preview-glyph"><Target size={17} /></div><h4>What needs attention</h4><p>Separate missing signals from requirements that are already supported.</p></article>
+              <article className="jm-preview-item"><span className="jm-preview-number">03</span><div className="jm-preview-glyph"><ArrowRight size={17} /></div><h4>What to do next</h4><p>Turn the match report into focused, evidence-led resume improvements.</p></article>
+            </div>
+          </section>
+        )}
+
         {jdResult && (
-          <div className="jd-v2-stack">
-            <section className="da-card jd-result jd-hero-card">
-              <div className="jd-hero-main">
-                <div>
-                  <div className="eyebrow">Job match estimate</div>
-                  <div className="jd-hero-score-line"><h3>{jdResult.match_score}%</h3><span className={`soft-badge ${jdResult.match_score >= 70 ? "success-badge" : ""}`}>{jdResult.match_score >= 80 ? "Strong overlap" : jdResult.match_score >= 60 ? "Good overlap" : "Needs tailoring"}</span></div>
-                  <p>Deterministic matching based on your resume. Category weights are normalized across skills detected in the job description; categories with no detected skills are excluded.</p>
+          <div className="jm-result-stack">
+            <section className="da-card jm-hero-card">
+              <div className="jm-hero-orbit jm-hero-orbit-one" /><div className="jm-hero-orbit jm-hero-orbit-two" />
+              <div className="jm-report-kicker"><span><Sparkles size={14} /> ROLE FIT REPORT</span><span className="jm-report-transparency"><ShieldCheck size={13} /> Deterministic score Â· transparent categories</span></div>
+              <div className="jm-hero-main">
+                <div className="jm-hero-copy">
+                  <div className="eyebrow">Your job match estimate</div>
+                  <h3>{fitHeadline}</h3>
+                  <p>{jdResult.recommendation || 'Use the match breakdown to focus your next resume edit on evidence you can genuinely support.'}</p>
+                  <div className="jm-hero-badges"><span className={`jm-fit-badge jm-fit-${scoreTone}`}>{fitLabel}</span><span className="jm-evidence-badge"><CheckCircle2 size={13} /> Resume evidence first</span></div>
                 </div>
-                <div className="score-ring warm" style={{ "--score": `${jdResult.match_score}%` }}>
-                  <div className="score-ring-inner">{jdResult.match_score}</div>
+                <div className="jm-score-display">
+                  <div className={`score-ring jm-score-ring ${scoreTone}`} style={{ '--score': `${matchScore}%` }}>
+                    <div className="score-ring-inner jm-score-ring-inner"><strong>{matchScore}</strong><span>/100</span></div>
+                  </div>
+                  <div className="jm-score-caption"><strong>Match score</strong><span>Compatibility estimate</span></div>
                 </div>
               </div>
-              <div className="jd-breakdown-grid">
-                <ScoreBar label="Required skills" score={requiredScore.score} max={requiredScore.max} />
-                <ScoreBar label="Preferred skills" score={preferredScore.score} max={preferredScore.max} />
-                <ScoreBar label="General alignment" score={generalScore.score} max={generalScore.max} />
+              <div className="jm-quick-stats">
+                <div className="jm-quick-stat"><span className="jm-stat-mark jm-stat-mark-match"><CheckCircle2 size={14} /></span><div><strong>{allMatched.length}</strong><span>Matched skill signals</span></div></div>
+                <div className="jm-quick-stat"><span className="jm-stat-mark jm-stat-mark-gap"><AlertCircle size={14} /></span><div><strong>{allMissing.length}</strong><span>Gaps to review</span></div></div>
+                <div className="jm-quick-stat"><span className="jm-stat-mark jm-stat-mark-required"><Target size={14} /></span><div><strong>{totalRequired ? `${requiredMatched.length}/${totalRequired}` : '—'}</strong><span>Required skills matched</span></div></div>
               </div>
             </section>
 
-            <div className="jd-v2-grid">
-              <section className="da-card jd-skill-card">
-                <div className="section-header"><div><div className="eyebrow">Core requirements</div><h3>Required skills</h3></div><span className="soft-badge">{requiredMatched.length + requiredMissing.length ? `${requiredMatched.length}/${requiredMatched.length + requiredMissing.length} matched` : "No skills detected"}</span></div>
-                <div className="jd-skill-block"><div className="jd-skill-title"><CheckCircle2 size={15} /> Matched</div><SkillChips items={requiredMatched} tone="success" /></div>
-                <div className="jd-skill-block"><div className="jd-skill-title warning"><AlertCircle size={15} /> Missing or underrepresented</div><SkillChips items={requiredMissing} tone="danger" /></div>
-              </section>
+            <section className="da-card jm-breakdown-card">
+              <div className="jm-section-heading"><div><div className="eyebrow">Score anatomy</div><h3>What is shaping your match?</h3><p>Each bar uses the category score supplied by the matching engine.</p></div><span className="jm-heading-icon"><BarChart3 size={17} /></span></div>
+              <div className="jm-score-meters">
+                <ScoreMeter label="Required skills" caption="Core requirements" score={requiredScore.score} max={requiredScore.max} icon={<Target size={15} />} />
+                <ScoreMeter label="Preferred skills" caption="Additional advantage" score={preferredScore.score} max={preferredScore.max} icon={<Sparkles size={15} />} />
+                <ScoreMeter label="General alignment" caption="Broader role signals" score={generalScore.score} max={generalScore.max} icon={<ArrowRight size={15} />} />
+              </div>
+              <p className="jm-score-note"><ShieldCheck size={14} /> Categories with no detected skills are reported as unavailable rather than treated as evidence.</p>
+            </section>
 
-              <section className="da-card jd-skill-card">
-                <div className="section-header"><div><div className="eyebrow">Nice to have</div><h3>Preferred skills</h3></div><span className="soft-badge">{preferredMatched.length + preferredMissing.length ? `${preferredMatched.length}/${preferredMatched.length + preferredMissing.length} matched` : "No skills detected"}</span></div>
-                <div className="jd-skill-block"><div className="jd-skill-title"><CheckCircle2 size={15} /> Matched</div><SkillChips items={preferredMatched} tone="success" /></div>
-                <div className="jd-skill-block"><div className="jd-skill-title warning"><AlertCircle size={15} /> Missing or underrepresented</div><SkillChips items={preferredMissing} tone="danger" /></div>
-              </section>
-            </div>
+            <section className="da-card jm-explorer-card">
+              <div className="jm-section-heading jm-explorer-heading"><div><div className="eyebrow">Skill signal explorer</div><h3>What's present—and what's still missing.</h3><p>Skills are grouped by their role in the job description. A missing keyword is a prompt to review your evidence, not a claim that you have the skill.</p></div><div className="jm-explorer-legend"><span><i className="is-match" />Matched</span><span><i className="is-gap" />Gap to review</span></div></div>
+              <div className={`jm-skill-groups ${(generalMatched.length || generalMissing.length) ? "" : "jm-skill-groups-two"}`}>
+                <SkillGroup title="Required skills" kicker="Must-have" matched={requiredMatched} missing={requiredMissing} note="Start here: these requirements typically matter most to role fit." tone="required" />
+                <SkillGroup title="Preferred skills" kicker="Nice-to-have" matched={preferredMatched} missing={preferredMissing} note="Helpful differentiators that may strengthen your application." tone="preferred" />
+                {(generalMatched.length || generalMissing.length) ? <SkillGroup title="General alignment" kicker="Context" matched={generalMatched} missing={generalMissing} note="Broader language and signals found in the role description." tone="general" /> : null}
+              </div>
+              <div className="jm-explorer-footer"><span>{allMissing.length ? `${allMissing.length} unique missing signals to review` : 'No missing signals detected in the returned categories'}</span><button className="secondary-button small" onClick={copyMissingSignals} disabled={!allMissing.length}><ClipboardPaste size={14} /> Copy gaps</button></div>
+            </section>
 
-            {(generalMatched.length || generalMissing.length) ? (
-              <section className="da-card jd-skill-card">
-                <div className="section-header"><div><div className="eyebrow">Additional signals</div><h3>General alignment</h3></div></div>
-                <div className="result-grid">
-                  <div><div className="jd-skill-title"><CheckCircle2 size={15} /> Matched</div><SkillChips items={generalMatched} tone="success" /></div>
-                  <div><div className="jd-skill-title warning"><AlertCircle size={15} /> Missing</div><SkillChips items={generalMissing} tone="danger" /></div>
-                </div>
-              </section>
-            ) : null}
-
-            <section className="da-card recommendation jd-action-card">
-              <div className="jd-action-icon"><Sparkles size={18} /></div>
-              <div className="jd-action-copy"><div className="eyebrow">Recommended next step</div><h3>{jdResult.recommendation}</h3><p>ResumeAI does not invent skills or experience. Use only evidence you genuinely have when tailoring your resume.</p></div>
-              <button className="primary-button" onClick={() => goTo("rewrite")}><PenLine size={16} /> Improve my resume</button>
+            <section className="da-card jm-action-card">
+              <div className="jm-action-emblem"><ArrowRight size={19} /></div>
+              <div className="jm-action-copy"><div className="eyebrow">Your next move</div><h3>Turn the findings into an evidence-led edit.</h3><p>{jdResult.recommendation || 'Prioritize the most important gaps, then tailor your resume only with skills and achievements you can substantiate.'}</p><span className="jm-action-footnote"><ShieldCheck size={13} /> Never add a skill, project, or metric unless it reflects your real experience.</span></div>
+              <button className="primary-button jm-action-button" onClick={() => goTo('rewrite')}><PenLine size={16} /> Improve my resume <ArrowRight size={15} /></button>
             </section>
           </div>
         )}
       </div>
     );
   };
-
   const renderCover = () => (
     <div className="tab-content-active stack-lg">
       <div className="page-heading"><div><div className="eyebrow">Cover letter</div><h2>Start with a role-specific first draft.</h2><p>Use your resume evidence and the company name to create a focused letter.</p></div></div>
