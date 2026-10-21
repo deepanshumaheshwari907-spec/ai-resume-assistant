@@ -2155,34 +2155,27 @@ async def update_opportunity_metadata(
 
     changed_fields = []
 
+    # A PATCH field is updated only when the client explicitly included it.
+    # Explicit null/empty values clear optional metadata; omitted fields are preserved.
+    fields_set = getattr(data, "model_fields_set", None)
+    if fields_set is None:
+        fields_set = getattr(data, "__fields_set__", set())
 
-
-    if data.application_deadline is not None:
-
+    if "application_deadline" in fields_set:
         opportunity.application_deadline = data.application_deadline
-
         changed_fields.append("deadline")
 
-    if data.follow_up_at is not None:
-
+    if "follow_up_at" in fields_set:
         opportunity.follow_up_at = data.follow_up_at
-
         changed_fields.append("follow-up")
 
-    if data.notes is not None:
-
-        opportunity.notes = data.notes.strip()[:10000] or None
-
+    if "notes" in fields_set:
+        opportunity.notes = (data.notes or "").strip()[:10000] or None
         changed_fields.append("notes")
 
-    if data.source_url is not None:
-
-        opportunity.source_url = data.source_url.strip()[:2000] or None
-
+    if "source_url" in fields_set:
+        opportunity.source_url = (data.source_url or "").strip()[:2000] or None
         changed_fields.append("source")
-
-
-
     # RESUMEAI_TIMELINE_V1
 
     if changed_fields:
