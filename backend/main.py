@@ -3323,6 +3323,95 @@ async def send_interview_report(
 
 
 
+def send_google_welcome_email(target_email: str, user_name: str) -> None:
+    """Send a branded welcome email once, after a new Google account is created."""
+    display_name = (user_name or "there").strip()[:120] or "there"
+    safe_name = html_lib.escape(display_name)
+    subject = "Welcome to ResumeAI - your career workspace is ready"
+    dashboard_url = "https://ai-resume-assistant-cyan.vercel.app/dashboard"
+    plain_text = (
+        f"Hi {display_name},\n\n"
+        "Welcome to ResumeAI! Your account is ready.\n\n"
+        "You can now review your resume, understand your strengths and gaps, "
+        "and compare your experience with a target job description.\n\n"
+        f"Open your ResumeAI workspace: {dashboard_url}\n\n"
+        "Keep every resume claim accurate and true to your experience.\n"
+        "- The ResumeAI Team\n"
+    )
+    html_body = f"""<!doctype html>
+<html lang="en">
+  <body style="margin:0;padding:0;background:#f1f2f5;font-family:Arial,Helvetica,sans-serif;color:#f6f7f9;">
+    <div style="padding:28px 12px;">
+      <div style="max-width:560px;margin:0 auto;background:#0a0b10;border:1px solid #272a33;border-radius:16px;overflow:hidden;">
+        <div style="height:4px;background:#e0231c;font-size:0;line-height:0;">&nbsp;</div>
+        <div style="padding:30px;">
+          <div style="font-size:26px;font-weight:800;letter-spacing:-0.8px;margin-bottom:26px;color:#fff;">Resume<span style="color:#e0231c;">AI</span></div>
+          <div style="font-size:10px;font-weight:700;letter-spacing:1.8px;color:#9ca3af;margin-bottom:10px;">YOUR CAREER WORKSPACE</div>
+          <h1 style="font-size:28px;line-height:1.2;margin:0 0 14px;color:#fff;">Welcome, {safe_name}.</h1>
+          <p style="font-size:15px;line-height:1.7;color:#b9bec8;margin:0 0 22px;">Your ResumeAI account is ready. Turn your resume into a clearer plan for your next opportunity.</p>
+          <div style="background:#11131a;border:1px solid #30343d;border-radius:12px;padding:18px;margin:0 0 24px;">
+            <div style="font-size:14px;line-height:1.8;color:#e7e9ee;">&#10003;&nbsp; Understand your resume strengths and gaps<br>&#10003;&nbsp; Compare your skills with a job description<br>&#10003;&nbsp; Improve wording while keeping it truthful</div>
+          </div>
+          <a href="{dashboard_url}" style="display:inline-block;background:#eab64e;color:#101116;text-decoration:none;font-size:14px;font-weight:700;padding:13px 18px;border-radius:9px;">Open your workspace &rarr;</a>
+          <p style="font-size:12px;line-height:1.6;color:#8e95a2;margin:26px 0 0;">Never add a skill, metric, or achievement that does not reflect your real experience.</p>
+          <div style="margin-top:26px;padding-top:16px;border-top:1px solid #272a33;font-size:12px;color:#747b87;">The ResumeAI Team</div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+"""
+
+    if BREVO_API_KEY:
+        if not BREVO_SENDER_EMAIL:
+            raise RuntimeError("BREVO_SENDER_EMAIL is missing.")
+        payload = {
+            "sender": {"name": "ResumeAI", "email": BREVO_SENDER_EMAIL},
+            "to": [{"email": target_email}],
+            "subject": subject,
+            "htmlContent": html_body,
+            "textContent": plain_text,
+        }
+        headers = {
+            "accept": "application/json",
+            "api-key": BREVO_API_KEY,
+            "content-type": "application/json",
+        }
+        try:
+            response = requests.post(
+                "https://api.brevo.com/v3/smtp/email",
+                headers=headers,
+                json=payload,
+                timeout=15,
+            )
+        except requests.RequestException as exc:
+            print(f"Google welcome email delivery failed: {type(exc).__name__}")
+            raise RuntimeError("Welcome email could not be delivered.") from exc
+
+        if not 200 <= response.status_code < 300:
+            print(f"Google welcome email delivery failed: HTTP {response.status_code}")
+            raise RuntimeError("Welcome email could not be delivered.")
+        return
+
+    # Gmail SMTP fallback is intended for local development; Render should use Brevo HTTPS API.
+    if not GMAIL_USER or not GMAIL_PASS:
+        raise RuntimeError("No welcome email provider is configured.")
+
+    message = MIMEMultipart("alternative")
+    message["Subject"] = subject
+    message["From"] = f"ResumeAI <{GMAIL_USER}>"
+    message["To"] = target_email
+    message.attach(MIMEText(plain_text, "plain", "utf-8"))
+    message.attach(MIMEText(html_body, "html", "utf-8"))
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as server:
+            server.starttls()
+            server.login(GMAIL_USER, GMAIL_PASS)
+            server.sendmail(GMAIL_USER, target_email, message.as_string())
+    except Exception as exc:
+        print(f"Google welcome email delivery failed: {type(exc).__name__}")
+        raise RuntimeError("Welcome email could not be delivered.") from exc
+
 @app.post("/auth/google")
 
 def google_login(data: GoogleLoginRequest, db: Session = Depends(get_db)):
@@ -3347,7 +3436,14 @@ def google_login(data: GoogleLoginRequest, db: Session = Depends(get_db)):
 
 
 
-        user_email = idinfo.get('email')
+        email_verified = idinfo.get("email_verified") is True
+        if not email_verified:
+            raise HTTPException(
+                status_code=403,
+                detail="Please use a Google account with a verified email address.",
+            )
+
+        user_email = str(idinfo.get("email") or "").strip().lower()
 
         user_name = idinfo.get('name', 'Google User')
 
@@ -3390,6 +3486,12 @@ def google_login(data: GoogleLoginRequest, db: Session = Depends(get_db)):
                 db.commit()
 
                 db.refresh(user)
+
+                try:
+                    send_google_welcome_email(user.email, user.name)
+                except Exception as email_err:
+                    # Do not block Google login if a welcome email provider is temporarily unavailable.
+                    print(f"Google welcome email delivery failed: {type(email_err).__name__}")
 
         except Exception as db_err:
 
