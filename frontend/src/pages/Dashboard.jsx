@@ -18,6 +18,8 @@ import {
   LogOut,
   Menu,
   MessageSquareText,
+  Search,
+  ListFilter,
   PenLine,
   Play,
   RefreshCw,
@@ -110,6 +112,10 @@ export default function Dashboard() {
 
   const [opportunities, setOpportunities] = useState([]);
   const [selectedOpportunity, setSelectedOpportunity] = useState(null);
+  const [opportunitySearch, setOpportunitySearch] = useState("");
+  const [opportunityStatusFilter, setOpportunityStatusFilter] = useState("all");
+  const [opportunityView, setOpportunityView] = useState("list");
+  const [opportunityDetailTab, setOpportunityDetailTab] = useState("overview");
   const [opportunityLoading, setOpportunityLoading] = useState(false);
   const [opportunityActionLoading, setOpportunityActionLoading] = useState(false);
   const [applicationPackLoading, setApplicationPackLoading] = useState(false);
@@ -2257,11 +2263,22 @@ export default function Dashboard() {
     };
   };
 
+  // Database datetimes are stored as UTC; SQLite responses may omit the trailing Z.
+  // Interpret timezone-less server timestamps as UTC, then format them in the browser's local timezone.
+  const parseServerDateTime = (value) => {
+    if (!value) return null;
+    const timestamp = String(value).trim();
+    if (!timestamp) return null;
+    const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(timestamp);
+    const parsed = new Date(hasTimezone ? timestamp : `${timestamp}Z`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
   const formatTrackingDate = (value, includeTime = false) => {
     if (!value) return "Not set";
 
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "Not set";
+    const date = parseServerDateTime(value);
+    if (!date) return "Not set";
 
     return new Intl.DateTimeFormat(undefined, {
       day: "numeric",
@@ -2274,8 +2291,8 @@ export default function Dashboard() {
   const getDeadlineState = (value) => {
     if (!value) return { label: "No deadline", tone: "neutral" };
 
-    const deadline = new Date(value);
-    if (Number.isNaN(deadline.getTime())) {
+    const deadline = parseServerDateTime(value);
+    if (!deadline) {
       return { label: "Invalid deadline", tone: "danger" };
     }
 
@@ -2302,8 +2319,8 @@ export default function Dashboard() {
   const getFollowUpState = (value) => {
     if (!value) return { label: "No follow-up", tone: "neutral" };
 
-    const followUp = new Date(value);
-    if (Number.isNaN(followUp.getTime())) {
+    const followUp = parseServerDateTime(value);
+    if (!followUp) {
       return { label: "Invalid follow-up", tone: "danger" };
     }
 
@@ -2327,16 +2344,49 @@ export default function Dashboard() {
     };
   };
 
+  /* RESUMEAI_TRACKER_DATE_TIME_INPUTS_V1 */
+  // Convert server timestamps to the user's local wall-clock values before editing.
+  const toLocalDateTimeInput = (value) => {
+    if (!value) return "";
+    const parsed = parseServerDateTime(value);
+    if (!parsed) return "";
+    const pad = (part) => String(part).padStart(2, "0");
+    return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
+  };
+
+  const splitTrackingDateTime = (value, part) => {
+    const [date = "", time = ""] = String(value || "").split("T");
+    if (part === "date") return date;
+    // A time without a date is not a meaningful deadline/follow-up value.
+    return date ? time : "";
+  };
+
+  const updateTrackingDateTimePart = (field, part, value) => {
+    setTrackingForm((previous) => {
+      const [currentDate = "", currentTime = ""] = String(previous[field] || "").split("T");
+      if (part === "date") {
+        if (!value) return { ...previous, [field]: "" };
+        // Preserve a time only when editing an existing date; a newly selected date starts at 9 AM.
+        const nextTime = currentDate ? (currentTime || "09:00") : "09:00";
+        return { ...previous, [field]: `${value}T${nextTime}` };
+      }
+      if (!currentDate) return { ...previous, [field]: "" };
+      return { ...previous, [field]: `${currentDate}T${value || "09:00"}` };
+    });
+  };
+
+  const toUtcIsoFromTrackingInput = (value) => {
+    const [date = "", time = ""] = String(value || "").split("T");
+    if (!date) return null;
+    const parsed = new Date(`${date}T${time || "09:00"}`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  };
   const syncTrackingForm = (opportunity) => {
     if (!opportunity) return;
 
     setTrackingForm({
-      application_deadline: opportunity.application_deadline
-        ? opportunity.application_deadline.slice(0, 16)
-        : "",
-      follow_up_at: opportunity.follow_up_at
-        ? opportunity.follow_up_at.slice(0, 16)
-        : "",
+      application_deadline: toLocalDateTimeInput(opportunity.application_deadline),
+      follow_up_at: toLocalDateTimeInput(opportunity.follow_up_at),
       notes: opportunity.notes || "",
       source_url: opportunity.source_url || "",
     });
@@ -2349,12 +2399,8 @@ export default function Dashboard() {
 
     try {
       const payload = {
-        application_deadline: trackingForm.application_deadline
-          ? new Date(trackingForm.application_deadline).toISOString()
-          : null,
-        follow_up_at: trackingForm.follow_up_at
-          ? new Date(trackingForm.follow_up_at).toISOString()
-          : null,
+        application_deadline: toUtcIsoFromTrackingInput(trackingForm.application_deadline),
+        follow_up_at: toUtcIsoFromTrackingInput(trackingForm.follow_up_at),
         notes: trackingForm.notes || null,
         source_url: trackingForm.source_url || null,
       };
@@ -2428,766 +2474,369 @@ export default function Dashboard() {
       closed: "Closed",
     };
 
-    return (
-      <div className="tab-content-active stack-lg">
-        <div className="page-heading opportunity-heading">
-          <div>
-            <div className="eyebrow">Application workspace</div>
-            <h2>Turn job descriptions into complete applications.</h2>
-            <p>Save an opportunity once, then match, tailor, write, and track it from one place.</p>
-          </div>
-          <button className="primary-button" onClick={() => setShowOpportunityForm((v) => !v)}>
-            <BriefcaseBusiness size={16} /> {showOpportunityForm ? "Close" : "New opportunity"}
-          </button>
-        </div>
+    const query = opportunitySearch.trim().toLowerCase();
+    const filteredOpportunities = opportunities.filter((item) => {
+      const haystack = [item.company_name, item.job_title, item.status, item.job_description]
+        .filter(Boolean).join(" ").toLowerCase();
+      const matchesQuery = !query || haystack.includes(query);
+      const matchesStatus = opportunityStatusFilter === "all" || item.status === opportunityStatusFilter;
+      return matchesQuery && matchesStatus;
+    });
+    const submittedCount = opportunities.filter((item) => ["applied", "interview", "offer"].includes(item.status)).length;
+    const interviewCount = opportunities.filter((item) => item.status === "interview").length;
+    const offerCount = opportunities.filter((item) => item.status === "offer").length;
 
-        {showOpportunityForm && (
-          <section className="da-card opportunity-form-card">
-            <div className="eyebrow">Create opportunity</div>
-            <div className="opportunity-form-grid">
-              <input className="da-input" value={opportunityForm.company_name} onChange={(e) => setOpportunityForm((p) => ({ ...p, company_name: e.target.value }))} placeholder="Company name" />
-              <input className="da-input" value={opportunityForm.job_title} onChange={(e) => setOpportunityForm((p) => ({ ...p, job_title: e.target.value }))} placeholder="Job title" />
-            </div>
-            <textarea className="da-textarea opportunity-form-textarea" value={opportunityForm.job_description} onChange={(e) => setOpportunityForm((p) => ({ ...p, job_description: e.target.value }))} placeholder="Paste the complete job description here..." />
-            <div className="form-footer"><span>{opportunityForm.job_description.length}/30,000 characters</span><button className="primary-button" onClick={createOpportunity} disabled={opportunityActionLoading}><Sparkles size={16} /> Save opportunity</button></div>
-          </section>
-        )}
+    const openSelectedOpportunity = (id) => {
+      setOpportunityDetailTab("overview");
+      openOpportunity(id);
+    };
 
-        {/* RESUMEAI_ANALYTICS_V1 */}
-        <section className="da-card analytics-v1-panel">
-          <div className="analytics-v1-header">
-            <div>
-              <div className="eyebrow">Application intelligence</div>
-              <h3>See how your application pipeline is performing.</h3>
-              <p>Live metrics are calculated from the opportunities in your account.</p>
-            </div>
-            <button
-              className="secondary-button small"
-              onClick={fetchOpportunityAnalytics}
-              disabled={analyticsLoading}
-            >
-              <RefreshCw size={14} className={analyticsLoading ? "spin" : ""} />
-              {analyticsLoading ? "Refreshing..." : "Refresh"}
-            </button>
-          </div>
+    const renderOpportunityCard = (item) => (
+      <button
+        type="button"
+        key={item.id}
+        className={`tracker-app-row ${selectedOpportunity?.id === item.id ? "selected" : ""}`}
+        onClick={() => openSelectedOpportunity(item.id)}
+      >
+        <span className="tracker-app-monogram">{(item.company_name || "C").charAt(0).toUpperCase()}</span>
+        <span className="tracker-app-row-main">
+          <strong>{item.job_title}</strong>
+          <span>{item.company_name}</span>
+          <span className="tracker-app-row-meta">
+            <span className={`status-pill status-${item.status}`}>{statusLabels[item.status] || item.status}</span>
+            {item.match_score != null && <span className={`tracker-inline-score ${getScoreTone(item.match_score)}`}>{item.match_score}% match</span>}
+            {item.application_deadline && <span className={`tracker-inline-deadline ${getDeadlineState(item.application_deadline).tone}`}>{getDeadlineState(item.application_deadline).label}</span>}
+          </span>
+        </span>
+        <span className="tracker-app-row-date">{item.updated_at || item.created_at ? new Date(item.updated_at || item.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "New"}</span>
+        <ChevronRight size={15} className="muted-icon" />
+      </button>
+    );
 
-          {analyticsLoading && !analyticsData ? (
-            <div className="analytics-v1-loading">
-              <RefreshCw size={18} className="spin" />
-              <span>Loading application insights...</span>
-            </div>
-          ) : (
-            <>
-              <div className="analytics-v1-grid">
-                <div className="analytics-stat">
-                  <span>Total applications</span>
-                  <strong>{analyticsData?.total_opportunities ?? 0}</strong>
-                </div>
-                <div className="analytics-stat">
-                  <span>Submitted</span>
-                  <strong>{analyticsData?.submitted_count ?? 0}</strong>
-                </div>
-                <div className="analytics-stat">
-                  <span>Interviews</span>
-                  <strong>{analyticsData?.interview_count ?? 0}</strong>
-                </div>
-                <div className="analytics-stat">
-                  <span>Offers</span>
-                  <strong>{analyticsData?.offer_count ?? 0}</strong>
-                </div>
-                <div className="analytics-stat">
-                  <span>Response rate</span>
-                  <strong>{Number(analyticsData?.response_rate ?? 0).toFixed(1)}%</strong>
-                </div>
-                <div className="analytics-stat">
-                  <span>Avg. match score</span>
-                  <strong>{analyticsData?.average_match_score != null ? `${analyticsData.average_match_score}%` : "—"}</strong>
-                </div>
-              </div>
-
-              <div className="analytics-v1-lower-grid">
-                <div className="analytics-v1-section">
-                  <div className="analytics-v1-section-heading">
-                    <span>Pipeline</span>
-                    <small>Current opportunities by stage</small>
-                  </div>
-                  <div className="analytics-pipeline-list">
-                    {OPPORTUNITY_STAGES.map((stage) => {
-                      const count = analyticsData?.stage_counts?.[stage.id] ?? 0;
-                      const total = analyticsData?.total_opportunities ?? 0;
-                      const width = total ? Math.max(4, Math.round((count / total) * 100)) : 0;
-                      return (
-                        <div className="analytics-pipeline-row" key={stage.id}>
-                          <div className="analytics-pipeline-label">
-                            <span>{stage.label}</span>
-                            <strong>{count}</strong>
-                          </div>
-                          <div className="analytics-pipeline-track">
-                            <span style={{ width: `${width}%` }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="analytics-v1-section">
-                  <div className="analytics-v1-section-heading">
-                    <span>Upcoming actions</span>
-                    <small>Deadlines and follow-ups</small>
-                  </div>
-                  {!analyticsData?.upcoming_actions?.length ? (
-                    <div className="analytics-actions-empty">
-                      <CheckCircle2 size={16} />
-                      <span>No upcoming deadlines or follow-ups.</span>
-                    </div>
-                  ) : (
-                    <div className="analytics-actions-list">
-                      {analyticsData.upcoming_actions.slice(0, 5).map((item, index) => (
-                        <button
-                          type="button"
-                          className={`analytics-action-row ${item.overdue ? "overdue" : ""}`}
-                          key={`${item.type}-${item.opportunity_id}-${item.date}-${index}`}
-                          onClick={() => openOpportunity(item.opportunity_id)}
-                        >
-                          <div className="analytics-action-icon">
-                            {item.type === "deadline" ? <Clock3 size={14} /> : <Send size={14} />}
-                          </div>
-                          <div className="analytics-action-copy">
-                            <strong>{item.job_title}</strong>
-                            <span>{item.company_name} · {item.type === "deadline" ? "Deadline" : "Follow-up"}</span>
-                          </div>
-                          <small>{formatAnalyticsAction(item)}</small>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-        </section>
-
-        <section className="da-card tracker-board-card">
-          <div className="tracker-board-header">
-            <div>
-              <div className="eyebrow">Application tracker</div>
-              <h3>Move every application through one clear pipeline.</h3>
-              <p>
-                Drag a job card to another stage. The change is saved to your account,
-                while the detailed application workspace stays below.
-              </p>
-            </div>
-
-            <div className="tracker-metrics">
-              <div>
-                <strong>{opportunities.length}</strong>
-                <span>Total</span>
-              </div>
-              <div>
-                <strong>
-                  {opportunities.filter((item) =>
-                    ["applied", "interview", "offer"].includes(item.status)
-                  ).length}
-                </strong>
-                <span>Active</span>
-              </div>
-              <div>
-                <strong>
-                  {opportunities.filter((item) => item.status === "interview").length}
-                </strong>
-                <span>Interviews</span>
-              </div>
-              <div>
-                <strong>
-                  {opportunities.filter((item) => item.status === "offer").length}
-                </strong>
-                <span>Offers</span>
-              </div>
-            </div>
-          </div>
-
-          {opportunityLoading ? (
-            <div className="empty-state tracker-loading">
-              <RefreshCw size={24} className="spin" />
-              <p>Loading your application pipeline...</p>
-            </div>
-          ) : (
-            <div className="kanban-board">
-              {OPPORTUNITY_STAGES.map((stage) => {
-                const items = opportunities.filter(
-                  (item) => item.status === stage.id
-                );
-
-                return (
-                  <div
-                    key={stage.id}
-                    className="kanban-column"
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={(event) => handleKanbanDrop(event, stage.id)}
-                  >
-                    <div className="kanban-column-header">
-                      <div>
-                        <strong>{stage.label}</strong>
-                        <span>{stage.hint}</span>
-                      </div>
-                      <span className="kanban-count">{items.length}</span>
-                    </div>
-
-                    <div className="kanban-column-body">
-                      {!items.length ? (
-                        <div className="kanban-empty">Drop applications here</div>
-                      ) : (
-                        items.map((item) => (
-                          <div
-                            key={item.id}
-                            className={`kanban-item ${
-                              selectedOpportunity?.id === item.id ? "selected" : ""
-                            }`}
-                            draggable
-                            role="button"
-                            tabIndex={0}
-                            title="Drag to change application stage"
-                            onDragStart={(event) => {
-                              event.dataTransfer.setData(
-                                "text/plain",
-                                String(item.id)
-                              );
-                              event.dataTransfer.effectAllowed = "move";
-                            }}
-                            onClick={() => openOpportunity(item.id)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault();
-                                openOpportunity(item.id);
-                              }
-                            }}
-                          >
-                            <div className="kanban-item-top">
-                              <div className="kanban-company-mark">
-                                {(item.company_name || "C")
-                                  .charAt(0)
-                                  .toUpperCase()}
-                              </div>
-
-                              {item.match_score != null && (
-                                <span
-                                  className={`kanban-match ${getScoreTone(
-                                    item.match_score
-                                  )}`}
-                                >
-                                  {item.match_score}% match
-                                </span>
-                              )}
-                            </div>
-
-                            <strong className="kanban-title">
-                              {item.job_title}
-                            </strong>
-
-                            <span className="kanban-company">
-                              {item.company_name}
-                            </span>
-
-                            <div className="kanban-item-footer">
-                              <span>
-                                {new Date(
-                                  item.updated_at || item.created_at
-                                ).toLocaleDateString()}
-                              </span>
-                              {item.application_deadline ? (
-                                <span
-                                  className={`kanban-deadline ${getDeadlineState(item.application_deadline).tone}`}
-                                >
-                                  {getDeadlineState(item.application_deadline).label}
-                                </span>
-                              ) : (
-                                <ChevronRight size={14} />
-                              )}
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        <div className="opportunity-layout">
-          <section className="da-card opportunity-list-card">
-            <div className="section-header">
-              <div><div className="eyebrow">Pipeline</div><h3>My opportunities</h3></div>
-              <span className="soft-badge">{opportunities.length} saved</span>
-            </div>
-            {opportunityLoading ? (
-              <div className="empty-state"><RefreshCw size={24} className="spin" /><p>Loading opportunities...</p></div>
-            ) : !opportunities.length ? (
-              <div className="empty-state"><BriefcaseBusiness size={24} /><p>No opportunities yet.</p><button className="secondary-button" onClick={() => setShowOpportunityForm(true)}>Save your first job</button></div>
-            ) : (
-              <div className="opportunity-list">
-                {opportunities.map((item) => (
-                  <button key={item.id} className={`opportunity-row ${selectedOpportunity?.id === item.id ? "selected" : ""}`} onClick={() => openOpportunity(item.id)}>
-                    <div className="opportunity-company-mark">{(item.company_name || "C").charAt(0).toUpperCase()}</div>
-                    <div className="opportunity-row-copy"><strong>{item.job_title}</strong><span>{item.company_name}</span></div>
-                    <div className="opportunity-row-meta"><span className={`status-pill status-${item.status}`}>{statusLabels[item.status] || item.status}</span>{item.match_score != null && <strong>{item.match_score}%</strong>}</div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="da-card opportunity-detail-card">
-            {!selectedOpportunity ? (
-              <div className="opportunity-empty-detail">
-                <div className="opportunity-detail-icon"><BriefcaseBusiness size={25} /></div>
-                <div className="eyebrow">Opportunity workspace</div>
-                <h3>Select a job to begin.</h3>
-                <p>Save a role, then build the full application around it.</p>
-              </div>
-            ) : (
-              <>
-                <div className="opportunity-detail-top">
-                  <div>
-                    <div className="eyebrow">{selectedOpportunity.company_name}</div>
-                    <h3>{selectedOpportunity.job_title}</h3>
-                    <p>Created {new Date(selectedOpportunity.created_at).toLocaleDateString()}</p>
-                  </div>
-                  <button className="icon-button danger-icon-button" onClick={deleteOpportunity} aria-label="Delete opportunity"><Trash2 size={17} /></button>
-                </div>
-
-                <div className="opportunity-status-row">
-                  <label>Application status</label>
-                  <select value={selectedOpportunity.status} onChange={(e) => updateOpportunityStatus(e.target.value)} disabled={opportunityActionLoading} className="status-select">
-                    {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                  </select>
-                </div>
-                {/* RESUMEAI_WORKSPACE_V2 */}
-                {(() => {
-                  const readiness = getOpportunityReadiness(selectedOpportunity);
-                  const steps = [
-                    {
-                      key: "match",
-                      label: "Job match",
-                      done: readiness.steps.match,
-                      action: () => runOpportunityAction("match"),
-                      button: "Run match",
-                    },
-                    {
-                      key: "tailored",
-                      label: "Tailored resume",
-                      done: readiness.steps.tailored,
-                      action: () => runOpportunityAction("tailor"),
-                      button: "Tailor resume",
-                    },
-                    {
-                      key: "cover",
-                      label: "Cover letter",
-                      done: readiness.steps.cover,
-                      action: () => runOpportunityAction("cover-letter"),
-                      button: "Create letter",
-                    },
-                    {
-                      key: "interview",
-                      label: "Interview prep",
-                      done: readiness.steps.interview,
-                      action: prepareApplication,
-                      button: "Prepare interview",
-                    },
-                    {
-                      key: "applied",
-                      label: "Application submitted",
-                      done: readiness.steps.applied,
-                      action: () => updateOpportunityStatus("applied"),
-                      button: "Mark applied",
-                    },
-                  ];
-
-                  const continueAction = !readiness.steps.match
-                    ? () => runOpportunityAction("match")
-                    : !readiness.steps.tailored
-                      ? () => runOpportunityAction("tailor")
-                      : !readiness.steps.cover
-                        ? () => runOpportunityAction("cover-letter")
-                        : !readiness.steps.interview
-                          ? prepareApplication
-                          : () => updateOpportunityStatus("applied");
-
-                  return (
-                    <div className="workspace-v2-panel">
-                      <div className="workspace-v2-top">
-                        <div>
-                          <div className="eyebrow">Application readiness</div>
-                          <h3>{readiness.percent}% workflow complete</h3>
-                          <p>Build a job-specific application in a clear step-by-step workflow.</p>
-                        </div>
-                        <div className="workspace-v2-percent">
-                          <strong>{readiness.percent}%</strong>
-                          <span>{readiness.completed}/{readiness.total} complete</span>
-                        </div>
-                      </div>
-
-                      <div className="workspace-v2-progress" aria-label={`Application readiness ${readiness.percent}%`}>
-                        <span style={{ width: `${readiness.percent}%` }} />
-                      </div>
-
-                      <div className="workspace-v2-next">
-                        <div>
-                          <span className="opp-label">Next recommended action</span>
-                          <strong>{readiness.next}</strong>
-                        </div>
-                        {!readiness.steps.applied && (
-                          <button
-                            className="primary-button small"
-                            onClick={continueAction}
-                            disabled={opportunityActionLoading || applicationPackLoading}
-                          >
-                            <ArrowRight size={15} /> Continue
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="workspace-v2-steps">
-                        {steps.map((step, index) => (
-                          <div
-                            key={step.key}
-                            className={`workspace-v2-step ${step.done ? "done" : ""}`}
-                          >
-                            <div className="workspace-v2-step-line">
-                              <div className="workspace-v2-step-icon">
-                                {step.done ? <CheckCircle2 size={15} /> : <span>{index + 1}</span>}
-                              </div>
-                              {index < steps.length - 1 && <div className="workspace-v2-connector" />}
-                            </div>
-
-                            <div className="workspace-v2-step-copy">
-                              <strong>{step.label}</strong>
-                              <span>{step.done ? "Completed" : "Not completed yet"}</span>
-                            </div>
-
-                            {!step.done && (
-                              <button
-                                className="secondary-button small workspace-v2-step-button"
-                                onClick={step.action}
-                                disabled={opportunityActionLoading || applicationPackLoading}
-                              >
-                                {step.button}
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })()}
-
-
-                <section className="tracking-v1-panel">
-                  <div className="tracking-v1-header">
-                    <div>
-                      <div className="eyebrow">Application details</div>
-                      <h3>Keep the important dates and context in one place.</h3>
-                      <p>
-                        Track the deadline, application date, next follow-up, source,
-                        and your private notes for this job.
-                      </p>
-                    </div>
-
-                    <div className="tracking-v1-status-stack">
-                      <span className={`tracking-status-badge ${getDeadlineState(selectedOpportunity.application_deadline).tone}`}>
-                        {getDeadlineState(selectedOpportunity.application_deadline).label}
-                      </span>
-                      <span className={`tracking-status-badge ${getFollowUpState(selectedOpportunity.follow_up_at).tone}`}>
-                        {getFollowUpState(selectedOpportunity.follow_up_at).label}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="tracking-v1-grid">
-                    <label className="tracking-field">
-                      <span>Application deadline</span>
-                      <input
-                        type="datetime-local"
-                        value={trackingForm.application_deadline}
-                        onChange={(event) =>
-                          setTrackingForm((prev) => ({
-                            ...prev,
-                            application_deadline: event.target.value,
-                          }))
-                        }
-                      />
-                      <small>
-                        {selectedOpportunity.application_deadline
-                          ? formatTrackingDate(selectedOpportunity.application_deadline, true)
-                          : "No deadline saved"}
-                      </small>
-                    </label>
-
-                    <label className="tracking-field">
-                      <span>Next follow-up</span>
-                      <input
-                        type="datetime-local"
-                        value={trackingForm.follow_up_at}
-                        onChange={(event) =>
-                          setTrackingForm((prev) => ({
-                            ...prev,
-                            follow_up_at: event.target.value,
-                          }))
-                        }
-                      />
-                      <small>
-                        {selectedOpportunity.follow_up_at
-                          ? formatTrackingDate(selectedOpportunity.follow_up_at, true)
-                          : "No follow-up scheduled"}
-                      </small>
-                    </label>
-
-                    <div className="tracking-readonly-card">
-                      <span>Applied on</span>
-                      <strong>
-                        {selectedOpportunity.applied_at
-                          ? formatTrackingDate(selectedOpportunity.applied_at)
-                          : "Not applied yet"}
-                      </strong>
-                      <small>
-                        Recorded automatically when the job reaches Applied,
-                        Interview, or Offer.
-                      </small>
-                    </div>
-
-                    <label className="tracking-field">
-                      <span>Application source</span>
-                      <input
-                        type="url"
-                        value={trackingForm.source_url}
-                        onChange={(event) =>
-                          setTrackingForm((prev) => ({
-                            ...prev,
-                            source_url: event.target.value,
-                          }))
-                        }
-                        placeholder="https://..."
-                      />
-                      <small>
-                        Save the original job posting or application link.
-                      </small>
-                    </label>
-
-                    <label className="tracking-field tracking-notes-field">
-                      <span>Private notes</span>
-                      <textarea
-                        value={trackingForm.notes}
-                        onChange={(event) =>
-                          setTrackingForm((prev) => ({
-                            ...prev,
-                            notes: event.target.value,
-                          }))
-                        }
-                        maxLength={10000}
-                        placeholder="Recruiter name, referral, follow-up context, questions to ask..."
-                      />
-                      <small>{trackingForm.notes.length}/10,000 characters</small>
-                    </label>
-                  </div>
-
-                  <div className="tracking-v1-footer">
-                    <div className="tracking-summary">
-                      {selectedOpportunity.application_deadline && (
-                        <span>
-                          Deadline: {formatTrackingDate(selectedOpportunity.application_deadline)}
-                        </span>
-                      )}
-                      {selectedOpportunity.follow_up_at && (
-                        <span>
-                          Follow-up: {formatTrackingDate(selectedOpportunity.follow_up_at)}
-                        </span>
-                      )}
-                    </div>
-
-                    <button
-                      className="primary-button small"
-                      onClick={saveOpportunityMetadata}
-                      disabled={opportunityActionLoading}
-                    >
-                      {opportunityActionLoading ? (
-                        <>
-                          <RefreshCw size={14} className="spin" /> Saving...
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle2 size={14} /> Save details
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </section>
-
-                <section className="timeline-v1-panel">
-                  <div className="timeline-v1-header">
-                    <div>
-                      <div className="eyebrow">Application timeline</div>
-                      <h3>Everything that happened on this application.</h3>
-                      <p>Key actions are recorded automatically so you can see the application journey at a glance.</p>
-                    </div>
-                    <span className="soft-badge">{activityData.length} events</span>
-                  </div>
-
-                  {activityLoading ? (
-                    <div className="timeline-empty"><RefreshCw size={18} className="spin" /><span>Loading timeline...</span></div>
-                  ) : !activityData.length ? (
-                    <div className="timeline-empty"><Clock3 size={18} /><span>No timeline events yet.</span></div>
-                  ) : (
-                    <div className="timeline-list">
-                      {activityData.map((activity, index) => (
-                        <div className="timeline-item" key={activity.id}>
-                          <div className="timeline-marker-wrap">
-                            <div className={`timeline-marker timeline-${activity.event_type}`}>
-                              {getActivityIcon(activity.event_type)}
-                            </div>
-                            {index < activityData.length - 1 && <div className="timeline-line" />}
-                          </div>
-                          <div className="timeline-item-content">
-                            <div className="timeline-item-topline">
-                              <strong>{activity.title}</strong>
-                              <span>{formatTrackingDate(activity.created_at, true)}</span>
-                            </div>
-                            {activity.details && <p>{activity.details}</p>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </section>
-
-                <div className="workspace-v2-section-label">
-                  <span>Application controls</span>
-                  <small>Refresh individual assets below without rebuilding the whole application.</small>
-                </div>
-
-                <div className="opportunity-score-panel">
-                  <div><span>Job match</span><strong>{selectedOpportunity.match_score != null ? `${selectedOpportunity.match_score}%` : "—"}</strong><small>{selectedOpportunity.match_score != null ? "Saved match result" : "Not matched yet"}</small></div>
-                  <div className="opportunity-actions">
-                    <button className="secondary-button small" onClick={() => runOpportunityAction("match")} disabled={opportunityActionLoading}><Target size={15} /> Match</button>
-                    <button className="primary-button small" onClick={() => runOpportunityAction("tailor")} disabled={opportunityActionLoading}><PenLine size={15} /> Tailor</button>
-                    <button className="secondary-button small" onClick={() => runOpportunityAction("cover-letter")} disabled={opportunityActionLoading}><FileText size={15} /> Cover letter</button>
-                    <button className="primary-button small pack-button" onClick={prepareApplication} disabled={opportunityActionLoading || applicationPackLoading}>
-                      {applicationPackLoading ? <><RefreshCw size={15} className="spin" /> Preparing...</> : <><Sparkles size={15} /> Prepare application</>}
-                    </button>
-                  </div>
-                </div>
-
-                {selectedOpportunity.application_pack && (
-                  <div className="opportunity-section application-pack-section">
-                    <div className="section-header">
-                      <div>
-                        <div className="eyebrow">Application pack</div>
-                        <h3>Everything ready for this opportunity</h3>
-                      </div>
-                      <button className="secondary-button small" onClick={downloadApplicationPack}>
-                        <Download size={15} /> Download pack
-                      </button>
-                    </div>
-
-                    <div className="pack-checklist">
-                      <div className="pack-check"><CheckCircle2 size={16} /><span><strong>Job match</strong><small>{selectedOpportunity.match_score ?? "—"}% saved</small></span></div>
-                      <div className="pack-check"><CheckCircle2 size={16} /><span><strong>Tailored resume</strong><small>Ready</small></span></div>
-                      <div className="pack-check"><CheckCircle2 size={16} /><span><strong>Cover letter</strong><small>Ready</small></span></div>
-                      <div className="pack-check"><CheckCircle2 size={16} /><span><strong>Interview prep</strong><small>{selectedOpportunity.application_pack.interview_prep?.questions?.length || 0} questions</small></span></div>
-                    </div>
-
-                    {!!selectedOpportunity.application_pack.interview_prep?.questions?.length && (
-                      <div className="pack-subsection">
-                        <span className="opp-label">Interview questions</span>
-                        <div className="pack-questions">
-                          {selectedOpportunity.application_pack.interview_prep.questions.slice(0, 8).map((q, i) => (
-                            <div className="pack-question" key={`${q}-${i}`}><span>{i + 1}</span><p>{q}</p></div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {!!selectedOpportunity.application_pack.interview_prep?.talking_points?.length && (
-                      <div className="pack-subsection">
-                        <span className="opp-label">Talking points</span>
-                        <div className="pack-talking-points">
-                          {selectedOpportunity.application_pack.interview_prep.talking_points.map((item, i) => (
-                            <div className="bullet-row" key={`${item}-${i}`}><CheckCircle2 size={15} /> <span>{item}</span></div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {selectedOpportunity.match_result && (
-                  <div className="opportunity-section">
-                    <div className="section-header"><div><div className="eyebrow">Requirement intelligence</div><h3>What this role needs</h3></div></div>
-                    <div className="opp-result-grid">
-                      <div><span className="opp-label success-text">Matched</span><div className="chip-wrap">{(selectedOpportunity.match_result.matched_keywords || selectedOpportunity.match_result.matched_required || []).map((k, i) => <span className="chip success" key={`${k}-${i}`}>{k}</span>)}</div></div>
-                      <div><span className="opp-label danger-text">Missing / weak</span><div className="chip-wrap">{(selectedOpportunity.match_result.missing_keywords || selectedOpportunity.match_result.missing_required || []).map((k, i) => <span className="chip danger" key={`${k}-${i}`}>{k}</span>)}</div></div>
-                    </div>
-                    {selectedOpportunity.match_result.recommendation && <div className="recommendation"><Sparkles size={15} /><span>{selectedOpportunity.match_result.recommendation}</span></div>}
-                  </div>
-                )}
-
-                {selectedOpportunity.tailored_resume && (
-                  <div className="opportunity-section tailored-resume-section">
-                    <div className="section-header">
-                      <div>
-                        <div className="eyebrow">Tailored asset</div>
-                        <h3>Professional resume ready</h3>
-                        <p>Structured for clean ATS-friendly presentation and PDF export.</p>
-                      </div>
-                      <div className="section-header-actions">
-                        <span className="soft-badge">Saved</span>
-                        <button
-                          className="secondary-button small"
-                          onClick={() =>
-                            downloadTailoredResumePdf(
-                              selectedOpportunity.tailored_resume,
-                              selectedOpportunity.job_title
-                            )
-                          }
-                        >
-                          <Download size={15} /> Download resume
-                        </button>
-                      </div>
-                    </div>
-                    <TailoredResumePreview
-                      value={selectedOpportunity.tailored_resume}
-                      targetRole={selectedOpportunity.job_title}
-                    />
-                  </div>
-                )}
-
-                {/* RESUMEAI_COVER_UI_V2 */}
-                {selectedOpportunity.cover_letter && (
-                  <div className="opportunity-section">
-                    <CoverLetterPreview
-                      letter={selectedOpportunity.cover_letter}
-                      companyName={selectedOpportunity.company_name}
-                      jobTitle={selectedOpportunity.job_title}
-                      loading={opportunityActionLoading}
-                      onCopy={() => {
-                        navigator.clipboard.writeText(selectedOpportunity.cover_letter);
-                        toast.success("Cover letter copied");
+    const renderBoard = () => (
+      <div className="tracker-board-scroll">
+        <div className="tracker-board-grid">
+          {OPPORTUNITY_STAGES.map((stage) => {
+            const items = filteredOpportunities.filter((item) => item.status === stage.id);
+            return (
+              <section
+                key={stage.id}
+                className="tracker-board-column"
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => handleKanbanDrop(event, stage.id)}
+              >
+                <header className="tracker-board-column-head">
+                  <div><strong>{stage.label}</strong><small>{stage.hint}</small></div>
+                  <span>{items.length}</span>
+                </header>
+                <div className="tracker-board-column-body">
+                  {items.length ? items.map((item) => (
+                    <div
+                      key={item.id}
+                      className={`tracker-board-item ${selectedOpportunity?.id === item.id ? "selected" : ""}`}
+                      draggable
+                      role="button"
+                      tabIndex={0}
+                      onDragStart={(event) => {
+                        event.dataTransfer.setData("text/plain", String(item.id));
+                        event.dataTransfer.effectAllowed = "move";
                       }}
-                      onRegenerate={() => runOpportunityAction("cover-letter")}
-                    />
-                  </div>
-                )}
-
-                <div className="opportunity-section"><div className="eyebrow">Job description</div><div className="job-description-preview">{selectedOpportunity.job_description}</div></div>
-              </>
-            )}
-          </section>
+                      onClick={() => openSelectedOpportunity(item.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          openSelectedOpportunity(item.id);
+                        }
+                      }}
+                    >
+                      <div className="tracker-board-item-top"><span>{(item.company_name || "C").charAt(0).toUpperCase()}</span>{item.match_score != null && <small>{item.match_score}%</small>}</div>
+                      <strong>{item.job_title}</strong>
+                      <small>{item.company_name}</small>
+                      {item.application_deadline && <span className={`tracker-inline-deadline ${getDeadlineState(item.application_deadline).tone}`}>{getDeadlineState(item.application_deadline).label}</span>}
+                    </div>
+                  )) : <div className="tracker-board-empty">No matching roles</div>}
+                </div>
+              </section>
+            );
+          })}
         </div>
       </div>
     );
-  };
 
+    const renderSelectedDetails = () => {
+      if (!selectedOpportunity) {
+        return (
+          <div className="tracker-detail-empty">
+            <div className="tracker-detail-empty-icon"><BriefcaseBusiness size={22} /></div>
+            <div className="eyebrow">Application workspace</div>
+            <h3>Select an application</h3>
+            <p>Choose a role from the list to review its progress, update dates, and continue preparing your application.</p>
+            {opportunities.length > 0 && <button className="secondary-button small" onClick={() => openSelectedOpportunity(filteredOpportunities[0]?.id || opportunities[0].id)}>Open an application <ArrowRight size={14} /></button>}
+          </div>
+        );
+      }
+
+      const readiness = getOpportunityReadiness(selectedOpportunity);
+      const steps = [
+        { key: "match", label: "Job match", done: readiness.steps.match, action: () => runOpportunityAction("match"), button: "Run match" },
+        { key: "tailored", label: "Rewrite resume", done: readiness.steps.tailored, action: () => runOpportunityAction("tailor"), button: "Tailor resume" },
+        { key: "cover", label: "Cover letter", done: readiness.steps.cover, action: () => runOpportunityAction("cover-letter"), button: "Create letter" },
+        { key: "interview", label: "Application pack", done: readiness.steps.interview, action: prepareApplication, button: "Prepare pack" },
+        { key: "applied", label: "Application submitted", done: readiness.steps.applied, action: () => updateOpportunityStatus("applied"), button: "Mark applied" },
+      ];
+      const continueAction = !readiness.steps.match
+        ? () => runOpportunityAction("match")
+        : !readiness.steps.tailored
+          ? () => runOpportunityAction("tailor")
+          : !readiness.steps.cover
+            ? () => runOpportunityAction("cover-letter")
+            : !readiness.steps.interview
+              ? prepareApplication
+              : () => updateOpportunityStatus("applied");
+
+      return (
+        <>
+          <div className="tracker-detail-header">
+            <div className="tracker-detail-title-wrap">
+              <span className="tracker-detail-monogram">{(selectedOpportunity.company_name || "C").charAt(0).toUpperCase()}</span>
+              <div><div className="eyebrow">{selectedOpportunity.company_name}</div><h3>{selectedOpportunity.job_title}</h3><p>Created {selectedOpportunity.created_at ? new Date(selectedOpportunity.created_at).toLocaleDateString() : "recently"}</p></div>
+            </div>
+            <div className="tracker-detail-header-actions">
+              <select aria-label="Application status" value={selectedOpportunity.status} onChange={(event) => updateOpportunityStatus(event.target.value)} disabled={opportunityActionLoading} className="status-select">
+                {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+              <button type="button" className="icon-button danger-icon-button" onClick={deleteOpportunity} aria-label="Delete opportunity" title="Delete opportunity"><Trash2 size={16} /></button>
+            </div>
+          </div>
+
+          <div className="tracker-detail-tabs" role="tablist" aria-label="Application details">
+            {[ ["overview", "Overview"], ["details", "Details"], ["activity", "Activity"], ["assets", "AI assets"] ].map(([id, label]) => (
+              <button key={id} type="button" role="tab" aria-selected={opportunityDetailTab === id} className={opportunityDetailTab === id ? "active" : ""} onClick={() => setOpportunityDetailTab(id)}>{label}</button>
+            ))}
+          </div>
+
+          {opportunityDetailTab === "overview" && (
+            <div className="tracker-detail-tab-body">
+              <section className="tracker-readiness-card">
+                <div className="tracker-readiness-head"><div><div className="eyebrow">Application readiness</div><h4>{readiness.next}</h4><p>{readiness.completed} of {readiness.total} workflow steps completed</p></div><strong>{readiness.percent}%</strong></div>
+                <div className="tracker-progress"><span style={{ width: `${readiness.percent}%` }} /></div>
+                <button type="button" className="primary-button small" onClick={continueAction} disabled={opportunityActionLoading || applicationPackLoading || readiness.steps.applied}><ArrowRight size={14} /> Continue next step</button>
+              </section>
+
+              <div className="tracker-detail-metrics">
+                <div><span>Match score</span><strong>{selectedOpportunity.match_score != null ? `${selectedOpportunity.match_score}%` : "â€”"}</strong></div>
+                <div><span>Deadline</span><strong>{selectedOpportunity.application_deadline ? formatTrackingDate(selectedOpportunity.application_deadline) : "Not set"}</strong></div>
+                <div><span>Next follow-up</span><strong>{selectedOpportunity.follow_up_at ? formatTrackingDate(selectedOpportunity.follow_up_at) : "Not set"}</strong></div>
+              </div>
+
+              <div className="tracker-quick-actions">
+                <button type="button" className="secondary-button small" onClick={() => runOpportunityAction("match")} disabled={opportunityActionLoading}><Target size={14} /> Match</button>
+                <button type="button" className="secondary-button small" onClick={() => runOpportunityAction("tailor")} disabled={opportunityActionLoading}><PenLine size={14} /> Rewrite resume</button>
+                <button type="button" className="secondary-button small" onClick={() => runOpportunityAction("cover-letter")} disabled={opportunityActionLoading}><FileText size={14} /> Cover letter</button>
+                <button type="button" className="primary-button small" onClick={prepareApplication} disabled={opportunityActionLoading || applicationPackLoading}>{applicationPackLoading ? <><RefreshCw size={14} className="spin" /> Preparing...</> : <><Sparkles size={14} /> Prepare pack</>}</button>
+              </div>
+
+              <div className="tracker-workflow-steps">
+                {steps.map((step, index) => (
+                  <div className={`tracker-workflow-step ${step.done ? "done" : ""}`} key={step.key}>
+                    <span className="tracker-workflow-number">{step.done ? <CheckCircle2 size={14} /> : String(index + 1).padStart(2, "0")}</span>
+                    <span className="tracker-workflow-label">{step.label}</span>
+                    <span className="tracker-workflow-state">{step.done ? "Done" : "Pending"}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {opportunityDetailTab === "details" && (
+            <div className="tracker-detail-tab-body">
+              <section className="tracker-metadata-card">
+                <div className="tracker-section-heading"><div><div className="eyebrow">Application details</div><h4>Dates, source and notes</h4></div><span className="tracking-status-badge">{selectedOpportunity.applied_at ? `Applied ${formatTrackingDate(selectedOpportunity.applied_at)}` : "Not applied yet"}</span></div>
+                <div className="tracker-metadata-grid">
+                  <div className="tracker-field tracker-datetime-field" role="group" aria-labelledby="tracker-deadline-label">
+                    <span id="tracker-deadline-label">Application deadline</span>
+                    <div className="tracker-datetime-inputs">
+                      <label className="tracker-date-control"><span>Date</span><input type="date" aria-label="Application deadline date" value={splitTrackingDateTime(trackingForm.application_deadline, "date")} onChange={(event) => updateTrackingDateTimePart("application_deadline", "date", event.target.value)} /></label>
+                      <label className="tracker-date-control"><span>Time</span><input type="time" aria-label="Application deadline time" disabled={!splitTrackingDateTime(trackingForm.application_deadline, "date")} value={splitTrackingDateTime(trackingForm.application_deadline, "time")} onChange={(event) => updateTrackingDateTimePart("application_deadline", "time", event.target.value)} /></label>
+                    </div>
+                    <small>{selectedOpportunity.application_deadline ? `Saved: ${formatTrackingDate(selectedOpportunity.application_deadline, true)}` : "Choose a date; time defaults to 9:00 AM."}</small>
+                  </div>
+                  <div className="tracker-field tracker-datetime-field" role="group" aria-labelledby="tracker-followup-label">
+                    <span id="tracker-followup-label">Next follow-up</span>
+                    <div className="tracker-datetime-inputs">
+                      <label className="tracker-date-control"><span>Date</span><input type="date" aria-label="Next follow-up date" value={splitTrackingDateTime(trackingForm.follow_up_at, "date")} onChange={(event) => updateTrackingDateTimePart("follow_up_at", "date", event.target.value)} /></label>
+                      <label className="tracker-date-control"><span>Time</span><input type="time" aria-label="Next follow-up time" disabled={!splitTrackingDateTime(trackingForm.follow_up_at, "date")} value={splitTrackingDateTime(trackingForm.follow_up_at, "time")} onChange={(event) => updateTrackingDateTimePart("follow_up_at", "time", event.target.value)} /></label>
+                    </div>
+                    <small>{selectedOpportunity.follow_up_at ? `Saved: ${formatTrackingDate(selectedOpportunity.follow_up_at, true)}` : "Choose a date; time defaults to 9:00 AM."}</small>
+                  </div>
+                  <label className="tracker-field"><span>Application source</span><input type="url" value={trackingForm.source_url} onChange={(event) => setTrackingForm((prev) => ({ ...prev, source_url: event.target.value }))} placeholder="https://job-posting.example" /><small>Original posting or application link</small></label>
+                  <label className="tracker-field tracker-notes-field"><span>Private notes <small>{trackingForm.notes.length}/10,000</small></span><textarea value={trackingForm.notes} onChange={(event) => setTrackingForm((prev) => ({ ...prev, notes: event.target.value }))} maxLength={10000} placeholder="Referral, recruiter, follow-up context..." /></label>
+                </div>
+                <div className="tracker-metadata-footer"><div><span className={`tracking-status-badge ${getDeadlineState(selectedOpportunity.application_deadline).tone}`}>{getDeadlineState(selectedOpportunity.application_deadline).label}</span><span className={`tracking-status-badge ${getFollowUpState(selectedOpportunity.follow_up_at).tone}`}>{getFollowUpState(selectedOpportunity.follow_up_at).label}</span></div><button type="button" className="primary-button small" onClick={saveOpportunityMetadata} disabled={opportunityActionLoading}>{opportunityActionLoading ? <><RefreshCw size={14} className="spin" /> Saving...</> : <><CheckCircle2 size={14} /> Save details</>}</button></div>
+              </section>
+              <section className="tracker-description-card"><div className="tracker-section-heading"><div><div className="eyebrow">Role brief</div><h4>Job description</h4></div>{selectedOpportunity.source_url && /^https?:\/\//i.test(selectedOpportunity.source_url) && <a href={selectedOpportunity.source_url} target="_blank" rel="noreferrer" className="tracker-source-link">Open source <ArrowRight size={13} /></a>}</div><div className="tracker-jd-preview">{selectedOpportunity.job_description || "No job description saved."}</div></section>
+            </div>
+          )}
+
+          {opportunityDetailTab === "activity" && (
+            <div className="tracker-detail-tab-body">
+              <section className="tracker-activity-card"><div className="tracker-section-heading"><div><div className="eyebrow">Application timeline</div><h4>Recent activity</h4></div><span className="soft-badge">{activityData.length} events</span></div>
+                {activityLoading ? <div className="tracker-empty-inline"><RefreshCw size={16} className="spin" /> Loading activity...</div> : !activityData.length ? <div className="tracker-empty-inline"><Clock3 size={16} /> No timeline events yet.</div> : <div className="timeline-list tracker-timeline-list">{activityData.map((activity, index) => <div className="timeline-item" key={activity.id}><div className="timeline-marker-wrap"><div className={`timeline-marker timeline-${activity.event_type}`}>{getActivityIcon(activity.event_type)}</div>{index < activityData.length - 1 && <div className="timeline-line" />}</div><div className="timeline-item-content"><div className="timeline-item-topline"><strong>{activity.title}</strong><span>{formatTrackingDate(activity.created_at, true)}</span></div>{activity.details && <p>{activity.details}</p>}</div></div>)}</div>}
+              </section>
+            </div>
+          )}
+
+          {opportunityDetailTab === "assets" && (
+            <div className="tracker-detail-tab-body tracker-assets-tab">
+              <div className="tracker-assets-actions">
+                <span>Generate or refresh role-specific assets</span>
+                <div className="tracker-quick-actions">
+                  <button type="button" className="secondary-button small" onClick={() => runOpportunityAction("match")} disabled={opportunityActionLoading}><Target size={14} /> Match</button>
+                  <button type="button" className="secondary-button small" onClick={() => runOpportunityAction("tailor")} disabled={opportunityActionLoading}><PenLine size={14} /> Rewrite</button>
+                  <button type="button" className="secondary-button small" onClick={() => runOpportunityAction("cover-letter")} disabled={opportunityActionLoading}><FileText size={14} /> Cover letter</button>
+                  <button type="button" className="primary-button small" onClick={prepareApplication} disabled={opportunityActionLoading || applicationPackLoading}>{applicationPackLoading ? <><RefreshCw size={14} className="spin" /> Preparing...</> : <><Sparkles size={14} /> Prepare pack</>}</button>
+                </div>
+              </div>
+
+              <div className="tracker-assets-note">
+                <Sparkles size={14} />
+                <span>Generated content stays collapsed until you open the asset you need.</span>
+              </div>
+
+              {selectedOpportunity.match_result && (
+                <details className="tracker-asset-disclosure">
+                  <summary>
+                    <span className="tracker-asset-disclosure-icon"><Target size={16} /></span>
+                    <span className="tracker-asset-disclosure-title"><strong>Job match</strong><small>Matched skills, gaps and recommendations</small></span>
+                    <span className="tracker-asset-disclosure-value">{selectedOpportunity.match_score != null ? `${selectedOpportunity.match_score}% match` : "Report ready"}</span>
+                    <ChevronRight size={16} className="tracker-disclosure-chevron" />
+                  </summary>
+                  <div className="tracker-asset-disclosure-body">
+                    <div className="tracker-section-heading"><div><div className="eyebrow">Requirement intelligence</div><h4>Role requirement signals</h4></div><strong className="tracker-asset-score">{selectedOpportunity.match_score ?? "â€”"}{selectedOpportunity.match_score != null ? "%" : ""}</strong></div>
+                    <div className="opp-result-grid">
+                      <div><span className="opp-label success-text">Matched</span><div className="chip-wrap">{(selectedOpportunity.match_result.matched_keywords || selectedOpportunity.match_result.matched_required || []).map((keyword, index) => <span className="chip success" key={`${keyword}-${index}`}>{keyword}</span>)}</div></div>
+                      <div><span className="opp-label danger-text">Missing / weak</span><div className="chip-wrap">{(selectedOpportunity.match_result.missing_keywords || selectedOpportunity.match_result.missing_required || []).map((keyword, index) => <span className="chip danger" key={`${keyword}-${index}`}>{keyword}</span>)}</div></div>
+                    </div>
+                    {selectedOpportunity.match_result.recommendation && <div className="recommendation"><Sparkles size={15} /><span>{selectedOpportunity.match_result.recommendation}</span></div>}
+                  </div>
+                </details>
+              )}
+
+              {selectedOpportunity.application_pack && (
+                <details className="tracker-asset-disclosure">
+                  <summary>
+                    <span className="tracker-asset-disclosure-icon"><Sparkles size={16} /></span>
+                    <span className="tracker-asset-disclosure-title"><strong>Application pack</strong><small>Preparation checklist and interview materials</small></span>
+                    <span className="tracker-asset-disclosure-value">{selectedOpportunity.application_pack.interview_prep?.questions?.length || 0} questions</span>
+                    <ChevronRight size={16} className="tracker-disclosure-chevron" />
+                  </summary>
+                  <div className="tracker-asset-disclosure-body">
+                    <div className="tracker-section-heading"><div><div className="eyebrow">Application pack</div><h4>Ready-to-use preparation pack</h4></div><button type="button" className="secondary-button small" onClick={downloadApplicationPack}><Download size={14} /> Download PDF</button></div>
+                    <div className="pack-checklist">
+                      <div className="pack-check"><CheckCircle2 size={16} /><span><strong>Job match</strong><small>{selectedOpportunity.match_score ?? "â€”"}{selectedOpportunity.match_score != null ? "%" : ""} saved</small></span></div>
+                      <div className="pack-check"><CheckCircle2 size={16} /><span><strong>Tailored resume</strong><small>{selectedOpportunity.tailored_resume ? "Ready" : "Not generated"}</small></span></div>
+                      <div className="pack-check"><CheckCircle2 size={16} /><span><strong>Cover letter</strong><small>{selectedOpportunity.cover_letter ? "Ready" : "Not generated"}</small></span></div>
+                      <div className="pack-check"><CheckCircle2 size={16} /><span><strong>Interview prep</strong><small>{selectedOpportunity.application_pack.interview_prep?.questions?.length || 0} questions</small></span></div>
+                    </div>
+                    {!!selectedOpportunity.application_pack.interview_prep?.questions?.length && (
+                      <details className="tracker-asset-nested-disclosure">
+                        <summary><span>Interview questions</span><span>{selectedOpportunity.application_pack.interview_prep.questions.length}</span><ChevronRight size={14} className="tracker-disclosure-chevron" /></summary>
+                        <div className="pack-questions">{selectedOpportunity.application_pack.interview_prep.questions.slice(0, 8).map((question, index) => <div className="pack-question" key={`${question}-${index}`}><span>{index + 1}</span><p>{question}</p></div>)}</div>
+                      </details>
+                    )}
+                    {!!selectedOpportunity.application_pack.interview_prep?.talking_points?.length && (
+                      <details className="tracker-asset-nested-disclosure">
+                        <summary><span>Talking points</span><span>{selectedOpportunity.application_pack.interview_prep.talking_points.length}</span><ChevronRight size={14} className="tracker-disclosure-chevron" /></summary>
+                        <div className="pack-talking-points">{selectedOpportunity.application_pack.interview_prep.talking_points.map((point, index) => <div className="bullet-row" key={`${point}-${index}`}><CheckCircle2 size={15} /><span>{point}</span></div>)}</div>
+                      </details>
+                    )}
+                  </div>
+                </details>
+              )}
+
+              {selectedOpportunity.tailored_resume && (
+                <details className="tracker-asset-disclosure">
+                  <summary>
+                    <span className="tracker-asset-disclosure-icon"><PenLine size={16} /></span>
+                    <span className="tracker-asset-disclosure-title"><strong>Tailored resume</strong><small>Role-specific resume draft</small></span>
+                    <span className="tracker-asset-disclosure-value">PDF ready</span>
+                    <ChevronRight size={16} className="tracker-disclosure-chevron" />
+                  </summary>
+                  <div className="tracker-asset-disclosure-body">
+                    <div className="tracker-section-heading"><div><div className="eyebrow">Tailored asset</div><h4>Resume draft</h4></div><button type="button" className="secondary-button small" onClick={() => downloadTailoredResumePdf(selectedOpportunity.tailored_resume, selectedOpportunity.job_title)}><Download size={14} /> Download PDF</button></div>
+                    <div className="tracker-asset-preview-frame"><TailoredResumePreview value={selectedOpportunity.tailored_resume} targetRole={selectedOpportunity.job_title} /></div>
+                  </div>
+                </details>
+              )}
+
+              {selectedOpportunity.cover_letter && (
+                <details className="tracker-asset-disclosure">
+                  <summary>
+                    <span className="tracker-asset-disclosure-icon"><FileText size={16} /></span>
+                    <span className="tracker-asset-disclosure-title"><strong>Cover letter</strong><small>Personalized letter for this role</small></span>
+                    <span className="tracker-asset-disclosure-value">Saved</span>
+                    <ChevronRight size={16} className="tracker-disclosure-chevron" />
+                  </summary>
+                  <div className="tracker-asset-disclosure-body">
+                    <CoverLetterPreview letter={selectedOpportunity.cover_letter} companyName={selectedOpportunity.company_name} jobTitle={selectedOpportunity.job_title} loading={opportunityActionLoading} onCopy={() => { navigator.clipboard.writeText(selectedOpportunity.cover_letter); toast.success("Cover letter copied"); }} onRegenerate={() => runOpportunityAction("cover-letter")} />
+                  </div>
+                </details>
+              )}
+
+              {!selectedOpportunity.application_pack && !selectedOpportunity.match_result && !selectedOpportunity.tailored_resume && !selectedOpportunity.cover_letter && <div className="tracker-empty-inline"><Sparkles size={16} /> Your generated match report, tailored resume, and cover letter will appear here after you run the tools.</div>}
+            </div>
+          )}
+        </>
+      );
+    };
+
+    return (
+      <div className="tab-content-active tracker-redesign">
+        <header className="tracker-redesign-header">
+          <div><div className="eyebrow">Career pipeline</div><h2>Applications, organized.</h2><p>Track every role, focus on the next move, and keep job-specific work connected.</p></div>
+          <div className="tracker-header-actions">
+            <button type="button" className="secondary-button small" onClick={() => { fetchOpportunities(); fetchOpportunityAnalytics(); }} disabled={opportunityLoading || analyticsLoading}><RefreshCw size={14} className={(opportunityLoading || analyticsLoading) ? "spin" : ""} /> Refresh</button>
+            <button type="button" className="primary-button" onClick={() => setShowOpportunityForm((value) => !value)}><BriefcaseBusiness size={15} /> {showOpportunityForm ? "Close form" : "New opportunity"}</button>
+          </div>
+        </header>
+
+        {showOpportunityForm && <section className="da-card tracker-create-card"><div className="tracker-section-heading"><div><div className="eyebrow">New application</div><h4>Add a role to your pipeline</h4></div><span className="tracker-form-hint">Company, role and job description required</span></div><div className="tracker-create-grid"><input aria-label="Company name" className="da-input" value={opportunityForm.company_name} onChange={(event) => setOpportunityForm((prev) => ({ ...prev, company_name: event.target.value }))} placeholder="Company name" /><input aria-label="Job title" className="da-input" value={opportunityForm.job_title} onChange={(event) => setOpportunityForm((prev) => ({ ...prev, job_title: event.target.value }))} placeholder="Job title" /></div><textarea aria-label="Job description" className="da-textarea tracker-create-description" value={opportunityForm.job_description} onChange={(event) => setOpportunityForm((prev) => ({ ...prev, job_description: event.target.value }))} maxLength={30000} placeholder="Paste the job description..." /><div className="tracker-create-footer"><span>{opportunityForm.job_description.length.toLocaleString()}/30,000 characters</span><button type="button" className="primary-button small" onClick={createOpportunity} disabled={opportunityActionLoading}><Sparkles size={14} /> Save opportunity</button></div></section>}
+
+        <section className="tracker-kpi-strip" aria-label="Application summary">
+          <article className="tracker-kpi"><span>Total roles</span><strong>{opportunities.length}</strong><small>Saved in your workspace</small></article>
+          <article className="tracker-kpi"><span>Submitted</span><strong>{submittedCount}</strong><small>Applied, interview or offer</small></article>
+          <article className="tracker-kpi"><span>Interviews</span><strong>{interviewCount}</strong><small>Active conversations</small></article>
+          <article className="tracker-kpi"><span>Offers</span><strong>{offerCount}</strong><small>Positive outcomes</small></article>
+        </section>
+
+        {!!analyticsData?.upcoming_actions?.length && <section className="tracker-upcoming-strip"><div className="tracker-upcoming-label"><Clock3 size={14} /><span>Coming up</span></div>{analyticsData.upcoming_actions.slice(0, 3).map((item, index) => <button type="button" key={`${item.type}-${item.opportunity_id}-${item.date}-${index}`} className={`tracker-upcoming-item ${item.overdue ? "overdue" : ""}`} onClick={() => openSelectedOpportunity(item.opportunity_id)}><span><strong>{item.job_title}</strong><small>{item.type === "deadline" ? "Deadline" : "Follow-up"} Â· {item.company_name}</small></span><b>{formatAnalyticsAction(item)}</b></button>)}</section>}
+
+        <section className="tracker-workbench">
+          <div className="tracker-toolbar">
+            <label className="tracker-search"><Search size={16} /><input type="search" value={opportunitySearch} onChange={(event) => setOpportunitySearch(event.target.value)} placeholder="Search company, role, or keyword..." aria-label="Search applications" />{opportunitySearch && <button type="button" onClick={() => setOpportunitySearch("")} aria-label="Clear search"><X size={14} /></button>}</label>
+            <label className="tracker-filter"><ListFilter size={15} /><select value={opportunityStatusFilter} onChange={(event) => setOpportunityStatusFilter(event.target.value)} aria-label="Filter by status"><option value="all">All statuses</option>{OPPORTUNITY_STAGES.map((stage) => <option key={stage.id} value={stage.id}>{stage.label}</option>)}</select></label>
+            <div className="tracker-view-toggle" role="group" aria-label="Application view"><button type="button" className={opportunityView === "list" ? "active" : ""} aria-pressed={opportunityView === "list"} onClick={() => setOpportunityView("list")}>List</button><button type="button" className={opportunityView === "board" ? "active" : ""} aria-pressed={opportunityView === "board"} onClick={() => setOpportunityView("board")}>Board</button></div>
+            <span className="tracker-result-count">{filteredOpportunities.length} of {opportunities.length}</span>
+          </div>
+
+          {opportunityView === "board" ? (
+            <>
+              {opportunityLoading ? <div className="tracker-empty-inline"><RefreshCw size={16} className="spin" /> Loading applications...</div> : filteredOpportunities.length ? renderBoard() : <div className="tracker-empty-inline"><Search size={16} /> No applications match these filters. <button type="button" className="text-button" onClick={() => { setOpportunitySearch(""); setOpportunityStatusFilter("all"); }}>Clear filters</button></div>}
+              <section className="tracker-detail-panel tracker-board-detail">{renderSelectedDetails()}</section>
+            </>
+          ) : (
+            <div className="tracker-main-grid">
+              <section className="tracker-list-panel">
+                <div className="tracker-list-heading"><div><div className="eyebrow">Your pipeline</div><h3>Applications <span>{filteredOpportunities.length}</span></h3></div><small>Choose a role to inspect it</small></div>
+                {opportunityLoading ? <div className="tracker-empty-inline"><RefreshCw size={16} className="spin" /> Loading applications...</div> : !filteredOpportunities.length ? <div className="tracker-empty-inline"><Search size={16} /><span>{opportunities.length ? "No applications match these filters." : "Your pipeline is empty. Add your first role to begin."}</span><button type="button" className="text-button" onClick={() => { if (opportunities.length) { setOpportunitySearch(""); setOpportunityStatusFilter("all"); } else { setShowOpportunityForm(true); } }}>{opportunities.length ? "Clear filters" : "Add a role"}</button></div> : <div className="tracker-list-scroll">{filteredOpportunities.map(renderOpportunityCard)}</div>}
+              </section>
+              <section className="tracker-detail-panel">{renderSelectedDetails()}</section>
+            </div>
+          )}
+        </section>
+      </div>
+    );
+  };
   const renderHistory = () => (
     <div className="tab-content-active stack-lg">
       <div className="page-heading"><div><div className="eyebrow">History</div><h2>Your previous resume analyses.</h2><p>Keep track of roles you tested and revisit the recommendations.</p></div><button className="secondary-button" onClick={fetchHistory} disabled={historyLoading}><RefreshCw size={15} className={historyLoading ? "spin" : ""} /> Refresh</button></div>
